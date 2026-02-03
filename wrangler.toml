@@ -15,7 +15,7 @@ id = "1d5bfc131118417ab453e9da3501fa5b"
 # مهم: TELEGRAM_BOT_TOKEN را به صورت Secret ست کنید (wrangler secret put TELEGRAM_BOT_TOKEN)
 
 # یوزرنیم بات بدون @ (برای ساخت لینک رفرال)
-BOT_USERNAME = "YourBotUsername"
+BOT_USERNAME = "marketiq_bot"
 
 # مسیر وبهوک: https://<domain>/telegram/<secret>
 TELEGRAM_WEBHOOK_SECRET = "vfrq"
