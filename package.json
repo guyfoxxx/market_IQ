@@ -1,0 +1,15 @@
+{
+  "name": "marketiq-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --remote",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail",
+    "kv:create": "wrangler kv namespace create BOT_KV",
+    "kv:list": "wrangler kv namespace list"
+  },
+  "devDependencies": {
+    "wrangler": "^3.100.0"
+  }
+}
