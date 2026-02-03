@@ -1,47 +1,27 @@
-name: Deploy MarketiQ Worker
-
+name: Deploy
 on:
   push:
     branches: [ "main" ]
-  workflow_dispatch:
-
-permissions:
-  contents: read
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: "20"
 
-      # اگر package-lock ندارید، npm install بهتر از npm ci است
-      - name: Install deps
-        run: npm install
+      - run: npm ci
 
-      - name: Inject KV namespace id into wrangler.toml
-        run: |
-         
-      - name: Set Worker secrets (Telegram + AI keys)
-        run: |
-          # Telegram
-          echo "${{ secrets.TELEGRAM_BOT_TOKEN }}" | npx wrangler secret put TELEGRAM_BOT_TOKEN
-          echo "${{ secrets.TELEGRAM_WEBHOOK_SECRET }}" | npx wrangler secret put TELEGRAM_WEBHOOK_SECRET
-          # AI (حداقل یکی را ست کنید)
-          if [ -n "${{ secrets.OPENAI_API_KEY }}" ]; then
-            echo "${{ secrets.OPENAI_API_KEY }}" | npx wrangler secret put OPENAI_API_KEY
-          fi
-          if [ -n "${{ secrets.GEMINI_API_KEY }}" ]; then
-            echo "${{ secrets.GEMINI_API_KEY }}" | npx wrangler secret put GEMINI_API_KEY
-          fi
-
-      - name: Deploy
-        run: npm run deploy
+      - name: Deploy Worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # اگر KV namespace id را می‌خوای inject کنی:
+          sed -i "s/REPLACE_WITH_YOUR_KV_NAMESPACE_ID/${{ secrets.CF_KV_NAMESPACE_ID }}/g" wrangler.toml
+
+          # Deploy
+          npm exec -- wrangler deploy
