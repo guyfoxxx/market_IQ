@@ -9,7 +9,7 @@ crons = ["*/5 * * * *"]
 
 [[kv_namespaces]]
 binding = "BOT_KV"
-id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+id = "1d5bfc131118417ab453e9da3501fa5b"
 
 [vars]
 # مهم: TELEGRAM_BOT_TOKEN را به صورت Secret ست کنید (wrangler secret put TELEGRAM_BOT_TOKEN)
@@ -18,13 +18,13 @@ id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
 BOT_USERNAME = "YourBotUsername"
 
 # مسیر وبهوک: https://<domain>/telegram/<secret>
-TELEGRAM_WEBHOOK_SECRET = "CHANGE_ME_TO_RANDOM_STRING"
+TELEGRAM_WEBHOOK_SECRET = "vfrq"
 
 # منطقه زمانی برای ریست سهمیه و نمایش تاریخ
 TIMEZONE = "Europe/Istanbul"
 
 # Owner/Admin (ID عددی تلگرام)
-OWNER_ID = "123456789"
+OWNER_ID = "7411159758"
 # می‌توانید چند Owner/Admin تعریف کنید
 OWNER_IDS = ""
 OWNER_HANDLES = ""
@@ -58,7 +58,7 @@ ADMIN_CHAT_IDS = ""
 
 # --- Limits (Optional) ---
 FREE_DAILY_LIMIT = "50"
-SUB_DAILY_LIMIT = "50"
+SUB_DAILY_LIMIT = "300"
 MONTHLY_LIMIT = "500"
 
 # --- Referral / rewards (Optional) ---
