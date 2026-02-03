@@ -26,12 +26,7 @@ jobs:
 
       - name: Inject KV namespace id into wrangler.toml
         run: |
-          if [ -z "${{ secrets.CF_KV_NAMESPACE_ID }}" ]; then
-            echo "CF_KV_NAMESPACE_ID secret is missing"
-            exit 1
-          fi
-          sed -i "s/REPLACE_WITH_YOUR_KV_NAMESPACE_ID/${{ secrets.CF_KV_NAMESPACE_ID }}/g" wrangler.toml
-
+         
       - name: Set Worker secrets (Telegram + AI keys)
         run: |
           # Telegram
