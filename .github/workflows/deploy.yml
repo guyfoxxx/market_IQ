@@ -8,20 +8,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
 
-      - name: Deploy Worker (no lockfile needed)
+      - name: Deploy Worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          # اگر KV داری، جایگزینی انجام بده (اگر secret خالی بود خطا نده)
           if [ -n "${{ secrets.CF_KV_NAMESPACE_ID }}" ]; then
             sed -i "s/REPLACE_WITH_YOUR_KV_NAMESPACE_ID/${{ secrets.CF_KV_NAMESPACE_ID }}/g" wrangler.toml
           fi
-
-          # Deploy با npm exec (معادل npx)
           npm exec --yes wrangler@4 -- deploy
+
+      - name: Set Telegram Webhook (auto)
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_WEBHOOK_SECRET: ${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
+          WEBHOOK_BASE_URL: ${{ secrets.WEBHOOK_BASE_URL }}
+        run: |
+          WEBHOOK_URL="${WEBHOOK_BASE_URL%/}/telegram/${TELEGRAM_WEBHOOK_SECRET}"
+          curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
+            -H "Content-Type: application/json" \
+            -d "{\"url\":\"${WEBHOOK_URL}\",\"drop_pending_updates\":true}"
