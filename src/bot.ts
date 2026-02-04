@@ -356,6 +356,15 @@ ${candleSummary}
     }
   }
 
+  async function continueOnboardingAfterPhone(ctx: MyContext, u: UserProfile) {
+    await setState(env, u.id, { flow: "onboarding", step: "ask_experience" });
+    const kb = new InlineKeyboard()
+      .text("مبتدی", "ob:exp:BEGINNER")
+      .text("متوسط", "ob:exp:INTERMEDIATE")
+      .text("حرفه‌ای", "ob:exp:PRO");
+    await safeReply(ctx, "تجربه شما در بازار؟", { reply_markup: kb });
+  }
+
   bot.use(async (ctx, next) => {
     ctx.env = env;
     if (ctx.from) {
@@ -754,30 +763,29 @@ if (data === "planlist") {
     }
   });
 
+  // Contact handler (onboarding)
+  bot.on("message:contact", async (ctx) => {
+    const u = requireUser(ctx);
+    const phone = ctx.message.contact.phone_number;
+    if (!phone) {
+      await safeReply(ctx, "❌ شماره معتبر دریافت نشد. دوباره ارسال کنید.");
+      return;
+    }
+    const st = await getState(env, u.id);
+    if (!u.phone && !(st?.flow === "onboarding" && st.step === "ask_contact")) {
+      await setState(env, u.id, { flow: "onboarding", step: "ask_contact" });
+    }
+    const r = await (await import("./lib/storage")).setUserPhone(env, u.id, phone);
+    if (!r.ok) {
+      await safeReply(ctx, r.reason || "خطا در ذخیره شماره");
+      return;
+    }
+    await continueOnboardingAfterPhone(ctx, u);
+  });
+
   // Messages: onboarding, flows
   bot.on("message", async (ctx) => {
     const u = requireUser(ctx);
-
-    // Contact handler (onboarding)
-    if (ctx.message?.contact) {
-      const st = await getState(env, u.id);
-      if (st?.flow === "onboarding" && st.step === "ask_contact") {
-        const phone = ctx.message.contact.phone_number;
-        const r = await (await import("./lib/storage")).setUserPhone(env, u.id, phone);
-        if (!r.ok) {
-          await safeReply(ctx, r.reason || "خطا در ذخیره شماره");
-          return;
-        }
-        // next
-        await setState(env, u.id, { flow: "onboarding", step: "ask_experience" });
-        const kb = new InlineKeyboard()
-          .text("مبتدی", "ob:exp:BEGINNER")
-          .text("متوسط", "ob:exp:INTERMEDIATE")
-          .text("حرفه‌ای", "ob:exp:PRO");
-        await safeReply(ctx, "تجربه شما در بازار؟", { reply_markup: kb });
-        return;
-      }
-    }
 
     const st = await getState(env, u.id);
 
