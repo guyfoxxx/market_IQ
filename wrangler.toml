@@ -60,7 +60,7 @@ TZ = "Europe/Berlin"
 # Create a Queue named "valinaf25-jobs" in Cloudflare dashboard.
 [[queues.producers]]
 binding = "JOBS"
-queue = "valinaf25-jobs
+queue = "valinaf25-jobs"
 
 [[queues.consumers]]
 queue = "valinaf25-jobs"
