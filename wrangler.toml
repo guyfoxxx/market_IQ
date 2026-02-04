@@ -6,7 +6,7 @@ compatibility_date = "2026-02-04"
 # wrangler kv:namespace create DB
 # سپس id را اینجا قرار دهید.
 kv_namespaces = [
-  { binding = "DB", id ="c9212375-a114-40f5-8b80-5d38918a8b7c" }
+  { binding = "DB", id ="c55e785d7dbf4a97a5b0b42c46473c0f" }
 ]
 
 [triggers]
