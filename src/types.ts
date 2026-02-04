@@ -1,5 +1,5 @@
 export type Risk = "LOW" | "MEDIUM" | "HIGH";
-export type Style = "PA" | "ICT" | "ATR" | "CUSTOM";
+export type Style = "RTM" | "ICT" | "PA" | "GENERAL" | "CUSTOM";
 export type Timeframe = "M15" | "H1" | "H4" | "D1";
 
 export type Market = "CRYPTO" | "FOREX" | "METALS" | "STOCKS";

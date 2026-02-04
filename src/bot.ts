@@ -2,9 +2,8 @@ import { Bot, Context, InlineKeyboard, Keyboard } from "grammy";
 import type { Env } from "./env";
 import type { Market, Risk, Style, Timeframe, UserProfile } from "./types";
 import { callAI, callAIWithImage, extractJsonBlock } from "./lib/ai";
-import { fetchCandlesWithMeta } from "./lib/data";
+import { fetchCandles } from "./lib/data";
 import { quickChartUrl, type Zone } from "./lib/chart";
-import { verifyPaymentTx } from "./lib/paymentVerify";
 import { consume, ensureQuotaReset, isAdmin, isOwner, remaining } from "./lib/quota";
 import {
   ensureUser,
@@ -82,20 +81,11 @@ function toMarketLabel(m: Market) {
   return m === "CRYPTO" ? "کریپتو" : m === "FOREX" ? "فارکس" : m === "METALS" ? "فلزات" : "سهام";
 }
 
-function styleLabel(style: string) {
-  if (style === "PA") return "پرایس اکشن (Ali Flah)";
-  if (style === "ICT") return "ICT / Smart Money";
-  if (style === "ATR") return "ATR / Volatility";
-  if (style === "CUSTOM") return "پرامپت اختصاصی";
-  return String(style);
-}
-
-
 function settingsText(u: UserProfile) {
   return `⚙️ تنظیمات فعلی:
 • تایم‌فریم: ${u.settings.timeframe}
 • ریسک: ${u.settings.risk}
-• سبک: ${styleLabel(u.settings.style)}
+• سبک: ${u.settings.style}
 • خبر: ${u.settings.news}`;
 }
 
@@ -104,8 +94,8 @@ function settingsKb(u: UserProfile) {
     .text("TF: M15", "set:tf:M15").text("TF: H1", "set:tf:H1").row()
     .text("TF: H4", "set:tf:H4").text("TF: D1", "set:tf:D1").row()
     .text("ریسک کم", "set:risk:LOW").text("ریسک متوسط", "set:risk:MEDIUM").text("ریسک زیاد", "set:risk:HIGH").row()
-    .text("پرایس‌اکشن", "set:style:PA").text("ICT", "set:style:ICT").text("ATR", "set:style:ATR").row()
-    .text("پرامپت اختصاصی", "set:style:CUSTOM").row()
+    .text("GENERAL", "set:style:GENERAL").text("RTM", "set:style:RTM").text("ICT", "set:style:ICT").row()
+    .text("PA", "set:style:PA").text("CUSTOM", "set:style:CUSTOM").row()
     .text("News ON", "set:news:ON").text("News OFF", "set:news:OFF").row()
     .text("⬅️ منو", "menu:home");
   return kb;
@@ -263,7 +253,8 @@ ${wallet ?? "❌ ولت تنظیم نشده"}
     const u = requireUser(ctx);
     const txid = (ctx.message?.text ?? "").split(" ").slice(1).join(" ").trim();
     if (!txid || !isValidTxid(txid)) {
-      await ctx.reply("فرمت TxID معتبر نیست. مثال:\n/tx 0xabc123...");
+      await ctx.reply("فرمت TxID معتبر نیست. مثال:
+/tx 0xabc123...");
       return;
     }
     const exists = await getPayment(env, txid);
@@ -309,7 +300,8 @@ ${wallet}` : "❌ هنوز ولت عمومی تنظیم نشده است.");
   bot.command("level", async (ctx) => {
     const u = requireUser(ctx);
     await setState(env, u.id, { flow: "level", step: "q1", data: { answers: [] } });
-    await ctx.reply("🧠 آزمون تعیین سطح شروع شد.\nسوال 1/6: هدف اصلی شما از ترید چیست؟ (کوتاه پاسخ بده)");
+    await ctx.reply("🧠 آزمون تعیین سطح شروع شد.
+سوال 1/6: هدف اصلی شما از ترید چیست؟ (کوتاه پاسخ بده)");
   });
 
   bot.command("customprompt", async (ctx) => {
@@ -354,34 +346,8 @@ ${codes}
   });
 
   bot.command(["support", "education"], async (ctx) => {
-    await ctx.reply("🆘 پشتیبانی: پیام خود را ارسال کنید تا به ادمین‌ها فوروارد شود.\n📚 آموزش: به‌زودی ...", { reply_markup: mainMenuKb() });
-  });
-
-  bot.command("verify", async (ctx) => {
-    const u = requireUser(ctx);
-    if (!isAdmin(u, env)) return ctx.reply("دسترسی ندارید.");
-    const txid = (ctx.message?.text ?? "").split(" ").slice(1).join(" ").trim();
-    if (!txid) return ctx.reply("مثال: /verify TXID");
-    try {
-      const r = await verifyPaymentTx(env, txid, parseFloatSafe(env.SUB_PRICE_USDT, 29));
-      const txt =
-        `🔎 نتیجه Verify\n` +
-        `TxID: ${txid}\n` +
-        `Network: ${r.network}\n` +
-        `Status: ${r.status ?? "-"}\n` +
-        `Confirmations: ${r.confirmations ?? "-"}\n` +
-        `Token: ${r.tokenContract ?? "-"}\n` +
-        `To Wallet: ${r.toWallet ?? "-"}\n` +
-        `Amount(USDT): ${r.amount ?? "-"}\n` +
-        `Result: ${r.ok ? "✅ OK" : "❌ FAIL"}\n` +
-        (r.reason ? `Reason: ${r.reason}\n` : "");
-      await ctx.reply(txt);
-      if (r.ok) {
-        await ctx.reply("اگر می‌خواهید تایید شود:\n/approve " + txid);
-      }
-    } catch (e: any) {
-      await ctx.reply("❌ خطا در verify: " + (e?.message ?? "unknown"));
-    }
+    await ctx.reply("🆘 پشتیبانی: پیام خود را ارسال کنید تا به ادمین‌ها فوروارد شود.
+📚 آموزش: به‌زودی ...", { reply_markup: mainMenuKb() });
   });
 
   bot.command("payments", async (ctx) => {
@@ -523,7 +489,8 @@ ${ctx.me.username ? `https://<YOUR_WORKER_URL>/admin` : "/admin"}
       }
       if (key === "news") u.settings.news = val as any;
       await putUser(env, u);
-      await ctx.reply("✅ ذخیره شد.\n" + settingsText(u), { reply_markup: settingsKb(u) });
+      await ctx.reply("✅ ذخیره شد.
+" + settingsText(u), { reply_markup: settingsKb(u) });
       return;
     }
 
@@ -594,7 +561,7 @@ ${ctx.me.username ? `https://<YOUR_WORKER_URL>/admin` : "/admin"}
         q2: "سوال 2/6: چقدر زمان در روز برای ترید دارید؟",
         q3: "سوال 3/6: بیشترین تجربه شما روی کدام بازار است؟",
         q4: "سوال 4/6: ریسک‌پذیری‌تان را چگونه توصیف می‌کنید؟",
-        q5: "سوال 5/6: کدام سبک را بیشتر می‌پسندید؟ (PA/ICT/ATR)",
+        q5: "سوال 5/6: کدام سبک را بیشتر می‌پسندید؟ (RTM/ICT/PA/General)",
         q6: "سوال 6/6: یک اشتباه رایج شما در ترید چیست؟"
       };
       const idx = Number(st.step.slice(1));
@@ -615,8 +582,8 @@ ${ctx.me.username ? `https://<YOUR_WORKER_URL>/admin` : "/admin"}
       const prompt = `تو یک مربی ترید هستی. بر اساس پاسخ‌های کاربر سطح او را تعیین کن.
 خروجی دقیقاً شامل دو بخش باشد:
 1) خلاصه ساختاریافته فارسی
-2) یک بلوک JSON (با \`\`\`json) با این ساختار (style فقط یکی از PA یا ICT یا ATR باشد):
-{ "level": "Beginner|Intermediate|Pro", "summary": "...", "suggestedMarket": "CRYPTO|FOREX|METALS|STOCKS", "suggestedSettings": { "timeframe": "H1", "risk":"MEDIUM", "style":"PA", "news":"OFF" } }
+2) یک بلوک JSON (با ```json) با این ساختار:
+{ "level": "Beginner|Intermediate|Pro", "summary": "...", "suggestedMarket": "CRYPTO|FOREX|METALS|STOCKS", "suggestedSettings": { "timeframe": "H1", "risk":"MEDIUM", "style":"GENERAL", "news":"OFF" } }
 
 پاسخ‌ها:
 ${JSON.stringify(st.data.answers, null, 2)}
@@ -675,7 +642,7 @@ ${strategy}
       await ctx.reply("⏳ در حال گرفتن دیتا و ساخت تحلیل...");
 
       try {
-        const { candles, source: dataSource, normalizedSymbol } = await fetchCandlesWithMeta(env, market, symbol, u.settings.timeframe, 200);
+        const candles = await fetchCandles(env, market, symbol, u.settings.timeframe, 200);
 
         const base = await getPromptBase(env);
         const stylePrompt = u.settings.style === "CUSTOM" && u.customPrompt?.ready && u.customPrompt.text
@@ -697,22 +664,18 @@ news=${u.settings.news}
 [Market]
 market=${market}
 symbol=${symbol}
-data_source=${dataSource}
-normalized_symbol=${normalizedSymbol}
 
 [OHLC summary]
 ${candleSummary}
 
-خروجی را به «متن معمولی» و مرحله‌به‌مرحله (فارسی) ارائه کن. سپس در انتهای پیام یک بلوک JSON بده.
-
-مواردی که باید در متن پوشش داده شود:
+خروجی حتماً با این قالب باشد:
 - وضعیت روند و ساختار (BOS/CHOCH اگر لازم)
 - نواحی مهم (Supply/Demand/OB/FVG/Support/Resistance)
 - سناریو Long / Short (در صورت امکان)
 - پیشنهاد ورود/حدضرر/اهداف (TP1/TP2)
 - مدیریت ریسک (RR پیشنهادی)
 - هشدارها/خبر (اگر news=ON)
-در انتها دقیقاً یک بلوک \`\`\`json تولید کن (فقط JSON، بدون توضیح اضافه):
+در انتها دقیقاً یک بلوک JSON با ```json تولید کن:
 {
   "zones":[{"type":"demand","from":0,"to":0,"label":"..."}],
   "levels":{"entry":0,"sl":0,"tp":[0,0]},
@@ -908,20 +871,6 @@ async function approvePayment(bot: Bot<MyContext>, env: Env, reviewerId: number,
   await putPayment(env, p);
 
   if (approve) {
-// Optional: verify on-chain before approving (if AUTO_VERIFY_PAYMENTS=ON)
-if ((env.AUTO_VERIFY_PAYMENTS ?? "OFF").toUpperCase() === "ON") {
-  try {
-    const vr = await (await import("./lib/paymentVerify")).verifyPaymentTx(env, txid, parseFloatSafe(env.SUB_PRICE_USDT, 29));
-    if (!vr.ok) {
-      if (ctx) await ctx.reply("❌ Verify ناموفق: " + (vr.reason || "unknown"));
-      return;
-    }
-  } catch (e: any) {
-    if (ctx) await ctx.reply("❌ خطا در verify: " + (e?.message ?? "unknown"));
-    return;
-  }
-}
-
     const user = await getUser(env, p.userId);
     if (user) {
       // activate subscription
