@@ -11,6 +11,7 @@ export interface Settings {
   risk: Risk;
   style: Style;
   news: "ON" | "OFF";
+  selectedPlanId?: string;
 }
 
 export interface Subscription {
