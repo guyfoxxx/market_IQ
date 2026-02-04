@@ -1,9 +1,4 @@
-<<<<<<< HEAD
-import {
-  Bot, Context, InlineKeyboard, Keyboard } from "grammy";
-=======
 import { Bot, Context, InlineKeyboard, Keyboard } from "grammy";
->>>>>>> e15cf79 (first commit)
 import type { Env } from "./env";
 import type { Market, Risk, Style, Timeframe, UserProfile } from "./types";
 import { callAI, callAIWithImage, extractJsonBlock } from "./lib/ai";
@@ -32,19 +27,11 @@ import {
   setPromptVision,
   setPublicWallet,
   setSelectedPlan,
-<<<<<<< HEAD
-  getPlans
-
-} from "./lib/storage";
-import { fmtDateIso, isValidTxid, nowIso, parseFloatSafe, parseIntSafe } from "./lib/utils";
-
-=======
 } from "./lib/storage";
 import { fmtDateIso, isValidTxid, nowIso, parseFloatSafe, parseIntSafe } from "./lib/utils";
 
 
 
->>>>>>> e15cf79 (first commit)
 type MyContext = Context & {
   env: Env;
   user?: UserProfile;
@@ -199,15 +186,6 @@ export function createBot(env: Env) {
 
   bot.command("signals", async (ctx) => {
     const u = requireUser(ctx);
-<<<<<<< HEAD
-    const r = await consume(env, u, 1);
-    if (!r.ok) {
-      await ctx.reply(`${r.reason}
-برای مشاهده سهمیه: /profile`);
-      return;
-    }
-=======
->>>>>>> e15cf79 (first commit)
     await setState(env, u.id, { flow: "signals", step: "choose_market" });
     const kb = new InlineKeyboard()
       .text("CRYPTO", "sig:market:CRYPTO")
@@ -487,8 +465,6 @@ ${ctx.me.username ? `https://<YOUR_WORKER_URL>/admin` : "/admin"}
     const u = requireUser(ctx);
     const data = ctx.callbackQuery.data;
 
-<<<<<<< HEAD
-=======
 // Inline plan selection (modern UX)
 if (data.startsWith("plan:")) {
   const planId = data.slice("plan:".length);
@@ -528,7 +504,6 @@ if (data === "planlist") {
 }
 
 
->>>>>>> e15cf79 (first commit)
     // Menu
     if (data === "menu:home") {
       await ctx.answerCallbackQuery();
