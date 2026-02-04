@@ -14,7 +14,7 @@
     "grammy": "^1.36.1"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260204.0",
+    "@cloudflare/workers-types": "^4.20260101.0",
     "@types/node": "^20.11.30",
     "eslint": "^9.7.0",
     "prettier": "^3.3.3",

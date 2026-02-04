@@ -5,7 +5,7 @@
 - داده‌ها را در Cloudflare KV ذخیره می‌کند
 - Cron هر ۵ دقیقه، custom prompt های موعددار را برای کاربر ارسال می‌کند
 - یک Mini App ساده در `/app` و یک Admin Panel ساده در `/admin` دارد
-- برای تحلیل از OpenAI Responses API یا Gemini استفاده می‌کند
+- برای تحلیل از OpenAI + Gemini + Cloudflare Workers AI با زنجیره fallback استفاده می‌کند
 
 > نکته: برای تولید تصویر چارت، از QuickChart استفاده شده (chartjs-chart-financial + annotation).
 
@@ -104,3 +104,35 @@ npm run set-webhook
 - سپس اگر OK بود: `/approve <TXID>`
 
 > نکته: اگر `AUTO_VERIFY_PAYMENTS=ON` باشد، قبل از approve، verify انجام می‌شود (پیشنهاد: OFF و دستی).
+
+
+---
+
+## تحلیل (AI) با فالبک چندمدلی
+برای تحلیل، بات به صورت پیش‌فرض این ترتیب را امتحان می‌کند:
+
+`openai -> gemini -> cloudflare (Workers AI)`
+
+با متغیر زیر قابل تغییر است:
+- `AI_CHAIN=openai,gemini,cloudflare`
+- `CLOUDFLARE_AI_MODEL=@cf/meta/llama-3.1-8b-instruct`
+
+> برای فعال شدن Workers AI لازم است در `wrangler.toml` این باشد:
+> `[ai] binding = "AI"` (در این پروژه اضافه شده)
+
+## دیتا (Market Data) با فالبک
+- کریپتو: `binance -> twelvedata -> alphavantage`
+- سایر بازارها: `twelvedata -> alphavantage`
+
+قابل تغییر:
+- `DATA_SOURCES_CRYPTO=binance,twelvedata,alphavantage`
+- `DATA_SOURCES_OTHER=twelvedata,alphavantage`
+
+---
+
+## سبک‌های تحلیل
+- PA (Price Action - Ali Flah)
+- ICT (Smart Money)
+- ATR (Volatility/ATR)
+- CUSTOM (بعد از ساخت پرامپت اختصاصی)
+# bazariq # bazariq

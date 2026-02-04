@@ -33,7 +33,7 @@ SUB_DURATION_DAYS = "30"
 
 DEFAULT_TIMEFRAME = "H1"
 DEFAULT_RISK = "MEDIUM"
-DEFAULT_STYLE = "GENERAL"
+DEFAULT_STYLE = "PA"
 DEFAULT_NEWS = "OFF"
 
 # لینک مینی‌اپ (بعد از Deploy آدرس Worker را اینجا بگذارید یا KV override کنید)
@@ -60,3 +60,15 @@ PAYMENT_NETWORK = "BSC" # BSC | OFF
 PAYMENT_TOKEN_CONTRACT = "0x55d398326f99059fF775485246999027B3197955" # USDT BEP20 (default)
 AUTO_VERIFY_PAYMENTS = "OFF" # اگر ON باشد Cron تلاش می‌کند پرداخت‌های PENDING را verify و auto-approve کند (پیشنهاد: OFF)
 MIN_CONFIRMATIONS = "3"
+
+# --- AI routing ---
+AI_CHAIN = "openai,gemini,cloudflare"
+CLOUDFLARE_AI_MODEL = "@cf/meta/llama-3.1-8b-instruct"
+
+# --- Market data routing ---
+DATA_SOURCES_CRYPTO = "binance,twelvedata,alphavantage"
+DATA_SOURCES_OTHER = "twelvedata,alphavantage"
+
+# Cloudflare Workers AI binding (LLM fallback)
+[ai]
+binding = "AI"
