@@ -525,6 +525,21 @@ export function adminHtml() {
     const r = await adminApi(path, body);
     $("rawOut").textContent = JSON.stringify(r, null, 2);
   };
+
+  // plans
+  const plansText = document.getElementById("plansText");
+  document.getElementById("plansLoad")?.addEventListener("click", async () => {
+    const r = await authedFetch(api.plans, { method: "GET" });
+    plansText.value = JSON.stringify(r.plans || [], null, 2);
+    toast("Loaded plans");
+  });
+  document.getElementById("plansSave")?.addEventListener("click", async () => {
+    let plans = [];
+    try { plans = JSON.parse(plansText.value || "[]"); } catch { alert("Invalid JSON"); return; }
+    await authedFetch(api.plans, { method: "POST", body: JSON.stringify({ plans }) });
+    toast("Saved plans");
+  });
+
 </script>
 </body>
 </html>`;
