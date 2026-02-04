@@ -1,160 +1,110 @@
-# Valinaf25 – Telegram Trading Bot (Cloudflare Worker + KV + Cron + MiniApp)
+# بات تلگرام سیگنال/تحلیل + مینی‌اپ + پنل ادمین (Cloudflare Worker)
 
-این پروژه یک **استارتر آماده دیپلوی** است که بخش‌های اصلی‌ای که گفتید را پیاده‌سازی کرده و قابل گسترش است:
-- Webhook تلگرام روی Cloudflare Workers
-- ذخیره‌سازی همه دیتاها روی KV
-- Cron (Scheduled) برای ارسال Custom Prompt با تاخیر ۲ ساعت
-- پنل ادمین داخل خود Worker
-- مینی‌اپ (Telegram WebApp) با APIهای اصلی
+این پروژه یک Cloudflare Worker + grammY است که:
+- Webhook تلگرام را هندل می‌کند
+- داده‌ها را در Cloudflare KV ذخیره می‌کند
+- Cron هر ۵ دقیقه، custom prompt های موعددار را برای کاربر ارسال می‌کند
+- یک Mini App ساده در `/app` و یک Admin Panel ساده در `/admin` دارد
+- برای تحلیل از OpenAI Responses API یا Gemini استفاده می‌کند
 
-> نکته: برای ساخت تصویر چارت، از **QuickChart** استفاده شده (Chart.js + Annotation + Financial). شما می‌توانید بعداً رندر را با سرویس دلخواه جایگزین کنید.
+> نکته: برای تولید تصویر چارت، از QuickChart استفاده شده (chartjs-chart-financial + annotation).
 
 ---
 
-## 1) نصب و اجرای محلی
+## 1) پیش‌نیازها
+- Cloudflare Workers + Wrangler
+- یک KV Namespace بسازید و ID را در `wrangler.toml` قرار دهید
+- در BotFather توکن بگیرید
+
+---
+
+## 2) تنظیم Secrets
+```bash
+npx wrangler secret put BOT_TOKEN
+npx wrangler secret put WEBHOOK_SECRET
+
+# اگر استفاده می‌کنید:
+npx wrangler secret put OPENAI_API_KEY
+npx wrangler secret put GEMINI_API_KEY
+npx wrangler secret put ALPHAVANTAGE_API_KEY
+# ...
+```
+
+---
+
+## 3) تنظیم BOT_INFO
+1) در مرورگر:
+`https://api.telegram.org/bot<BOT_TOKEN>/getMe`
+2) مقدار `result` را بردارید و داخل `BOT_INFO` در `wrangler.toml` قرار دهید.
+
+---
+
+## 4) Deploy
 ```bash
 npm i
-cp .dev.vars.example .dev.vars
-# مقادیر .dev.vars را تنظیم کنید
-npm run dev
-```
-
----
-
-## 2) ساخت KV و اتصال به Worker
-```bash
-wrangler kv:namespace create DB
-```
-`id` خروجی را داخل `wrangler.toml` جایگزین کنید.
-
----
-
-## 3) ست‌کردن وبهوک تلگرام
-URL وبهوک شما:
-`{PUBLIC_BASE_URL}/telegram`
-
-در تلگرام:
-```bash
-curl -X POST "https://api.telegram.org/bot<YOUR_TOKEN>/setWebhook"   -H "Content-Type: application/json"   -d '{
-    "url": "https://YOUR_WORKER_SUBDOMAIN.workers.dev/telegram",
-    "secret_token": "TELEGRAM_WEBHOOK_SECRET"
-  }'
-```
-
----
-
-## 4) دیپلوی دستی
-```bash
 npm run deploy
 ```
 
 ---
 
-## 5) دیپلوی خودکار از GitHub
-در ریپو GitHub این Secrets را تنظیم کنید:
-- `CLOUDFLARE_API_TOKEN`
-- `CLOUDFLARE_ACCOUNT_ID`
+## 5) ست کردن Webhook
+در تلگرام باید webhook روی URL Worker تنظیم شود.
 
-سپس هر Push روی `main` → دیپلوی خودکار.
-
----
-
-## 6) دستورات مهم داخل بات
-- `/start` , `/menu`
-- `/signals`
-- `/settings`
-- `/profile`
-- `/buy` یا `/pay`
-- `/tx <TXID>`
-- `/wallet`
-- `/level`
-- `/customprompt`
-- `/ref`
-- `/redeem`
-- `/support` , `/education`
-
-ادمین/اونر:
-- `/payments`
-- `/approve TXID`
-- `/reject TXID`
-- `/setwallet WALLET_ADDRESS`
-- `/setfreelimit <n>`
-- `/setsublimit <n>`
-- `/admin` (لینک پنل)
-
----
-
-## 7) نکته‌های مهم امنیتی
-- برای وبهوک تلگرام از `secret_token` استفاده شده (`TELEGRAM_WEBHOOK_SECRET`).
-- برای پنل ادمین، توکن جداگانه دارید (`ADMIN_PANEL_TOKEN`).
-- APIهای مینی‌اپ از `initData` تلگرام verify می‌شوند.
-
----
-
-## 8) ساختار KV
-کلیدهای اصلی:
-- `user:<telegramId>`
-- `phone:<phoneE164>` → جلوگیری از شماره تکراری
-- `ref:<code>` → referrerId
-- `pay:<txid>`
-- `cfg:*` (wallet, banner, limits, prompts, botUsername)
-- `session:<telegramId>`
-- `job:customprompt:<jobId>`
-
----
-
-اگر دوست دارید، می‌تونم در مرحله بعد:
-- شِمای دقیق‌تر خروجی AI برای تحلیل و زون‌ها را سخت‌گیرانه‌تر کنم،
-- یا منابع دیتا را دقیق‌تر/حرفه‌ای‌تر (مثلاً مدیریت RateLimit و Cache و ...) کنم.
-
-
----
-
-## Zones (Strict) – خروجی سخت‌گیرانه برای زون‌ها
-
-ربات در انتهای هر تحلیل، **آخرین بخش پیام** یک بلاک ` ```json``` ` تولید می‌کند که باید **JSON معتبر** و مطابق `zones_v1` باشد.
-
-**اسکیمای خروجی:**
-```json
-{
-  "schema_version": "zones_v1",
-  "symbol": "BTCUSDT",
-  "market": "crypto",
-  "timeframe": "H4",
-  "generated_at": "2026-02-04T00:00:00Z",
-  "zones": [
-    {
-      "id": "Z1",
-      "kind": "demand",
-      "price_from": 0,
-      "price_to": 0,
-      "timeframe": "H4",
-      "rationale": "علت/منطق کوتاه",
-      "invalidation": "شرط باطل شدن",
-      "confidence": 0.0
-    }
-  ]
-}
+### روش سریع (Browser)
+```
+https://api.telegram.org/bot<BOT_TOKEN>/setWebhook?url=https://<WORKER>.<SUBDOMAIN>.workers.dev/webhook&secret_token=<WEBHOOK_SECRET>
 ```
 
-> نکته: اگر مدل JSON را خراب برگرداند، سیستم یک‌بار تلاش می‌کند JSON را **ترمیم** کند تا چارت با زون‌ها حتماً ساخته شود.
+### روش اسکریپت
+1) فایل `scripts/setWebhook.js` را ببینید
+2) env های `BOT_TOKEN`, `WEBHOOK_SECRET`, `PUBLIC_BASE_URL` را ست کنید
+3) سپس:
+```bash
+npm run set-webhook
+```
 
 ---
 
-## News – پشتیبانی بهتر از خبرهای بازار
+## 6) GitHub Auto Deploy
+در ریپوی GitHub:
+- Secrets را بگذارید:
+  - `CLOUDFLARE_API_TOKEN`
+  - `CLOUDFLARE_ACCOUNT_ID`
+- هر push روی `main` -> deploy
 
-اگر `News` در تنظیمات کاربر روشن باشد:
-- خبرهای مرتبط قبل از تحلیل به عنوان **زمینه** به مدل داده می‌شود.
-- بعد از تحلیل، یک پیام جداگانه شامل خلاصه خبر/لینک‌ها ارسال می‌شود.
-- در Mini App هم خروجی خبرها همراه تحلیل برگشت داده می‌شود.
+---
 
-**منابع فعلی (RSS):**
-- Yahoo Finance RSS (بر اساس سمبل) – `feeds.finance.yahoo.com/rss/2.0/headline?...`
-- CoinDesk RSS (برای Crypto) – `coindesk.com/arc/outboundfeeds/rss/?outputType=xml`
-- ForexFactory Calendar RSS (برای Forex) – `forexfactory.com/calendar/rss`
+## مسیرها
+- `POST /webhook`  ورودی آپدیت‌های تلگرام
+- `GET /app`       مینی‌اپ
+- `GET /admin`     پنل ادمین (با توکن)
+- `POST /api/*`    APIهای مینی‌اپ
+- `POST /admin/api/*` APIهای پنل ادمین
 
-**دستور جدید:**
-- `/news [market] [symbol]`
-  - مثال: `/news crypto BTCUSDT`
-  - مثال: `/news forex EUR/USD`
+---
 
+## نکته‌های مهم
+- برای اینکه Mini App بتواند کاربر را تشخیص دهد، از `initData` تلگرام استفاده می‌کند و Worker آن را verify می‌کند.
+- برای مقیاس بالا، بهتر است پرداخت‌ها/لیست‌ها را به D1 یا Durable Object منتقل کنید. این نسخه KV-only است.
+
+
+
+---
+
+## Scale (Queue-first برای 100k کاربر)
+مسیر تحلیل (/signals) به Queue منتقل شده تا webhook سریع جواب بدهد و از Timeout/هنگ جلوگیری شود.
+
+### لازم است در Cloudflare بسازید:
+- Queue: `valinaf25-jobs` (Binding: `JOBS`)
+- (اختیاری) R2 bucket: `valinaf25-assets` (Binding: `ASSETS`)
+
+> بعد از ساخت Queue و Deploy، /signals پیام «در حال پردازش…» می‌دهد و نتیجه با کمی تاخیر ارسال می‌شود.
+
+
+### Cache تحلیل AI
+برای کاهش هزینه و افزایش سرعت، خروجی AI برای هر (market/symbol/tf/style/risk/news) به مدت ~90 ثانیه در KV کش می‌شود.
+کلید: `cache:analysis:...`
+
+
+### کش تحلیل (AI Cache)
+برای کاهش هزینه و افزایش سرعت، نتیجه تحلیل برای ترکیب (market/symbol/tf/style/risk/news) به مدت ~120 ثانیه در KV کش می‌شود.
