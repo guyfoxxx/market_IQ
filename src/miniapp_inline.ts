@@ -1,1 +1,554 @@
-export const MINIAPP_HTML = "<!doctype html>\n<html lang=\"fa\" dir=\"rtl\">\n<head>\n  <meta charset=\"utf-8\" />\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n  <title>Market IQ</title>\n  <style>\n    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; background:#0b1220; color:#e9eef9; }\n    header { padding: 14px 16px; background:#111a2e; border-bottom:1px solid #223055; position: sticky; top: 0; }\n    header h1 { margin:0; font-size: 16px; }\n    main { padding: 16px; max-width: 860px; margin: 0 auto; }\n    .tabs { display:flex; gap:10px; margin-bottom: 12px; flex-wrap: wrap; }\n    .tab { padding: 8px 10px; border-radius: 999px; border:1px solid #223055; background:#111a2e; cursor:pointer; }\n    .tab.active { background:#3b82f6; border-color:#3b82f6; }\n    .card { background:#111a2e; border:1px solid #223055; border-radius:14px; padding: 14px; margin-bottom: 12px; }\n    input, select, textarea { width:100%; padding: 10px 12px; border-radius:10px; border:1px solid #2a3b68; background:#0b1220; color:#e9eef9; }\n    button { padding: 10px 12px; border: 0; border-radius: 10px; background:#3b82f6; color:white; cursor:pointer; }\n    .row { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }\n    pre { white-space: pre-wrap; background:#0b1220; border:1px solid #223055; padding:10px; border-radius:10px; }\n    a { color: #93c5fd; }\n    .banner { border: 1px dashed #3b82f6; background: rgba(59,130,246,0.12); padding: 12px; border-radius: 14px; margin-bottom: 12px; display:none;}\n  </style>\n  <script src=\"https://telegram.org/js/telegram-web-app.js\"></script>\n</head>\n<body>\n<header><h1>Mini App</h1></header>\n<main>\n  <div id=\"banner\" class=\"banner\">\n    <div id=\"bannerText\"></div>\n    <a id=\"bannerLink\" href=\"#\" target=\"_blank\" rel=\"noreferrer\">\u0628\u0627\u0632 \u06a9\u0631\u062f\u0646</a>\n  </div>\n\n  <div class=\"tabs\">\n    <div class=\"tab active\" data-tab=\"dash\" onclick=\"switchTab('dash')\">\u062f\u0627\u0634\u0628\u0648\u0631\u062f</div>\n    <div class=\"tab\" data-tab=\"analyze\" onclick=\"switchTab('analyze')\">\u062a\u062d\u0644\u06cc\u0644</div>\n    <div class=\"tab\" data-tab=\"settings\" onclick=\"switchTab('settings')\">\u062a\u0646\u0638\u06cc\u0645\u0627\u062a</div>\n    <div class=\"tab\" data-tab=\"wallet\" onclick=\"switchTab('wallet')\">\u06a9\u06cc\u0641 \u067e\u0648\u0644</div>\n  </div>\n\n  <section id=\"dash\" class=\"card\"></section>\n\n  <section id=\"analyze\" class=\"card\" style=\"display:none;\">\n    <div class=\"row\">\n      <div>\n        <label>Market</label>\n        <select id=\"mkt\">\n          <option value=\"crypto\">Crypto</option>\n          <option value=\"forex\">Forex</option>\n          <option value=\"metals\">Metals</option>\n          <option value=\"stocks\">Stocks</option>\n        </select>\n      </div>\n      <div>\n        <label>Symbol</label>\n        <input id=\"sym\" placeholder=\"BTCUSDT / EUR/USD / XAUUSD / AAPL\" />\n      </div>\n    </div>\n    <button onclick=\"runAnalysis()\">\u0627\u062c\u0631\u0627\u06cc \u062a\u062d\u0644\u06cc\u0644</button>\n    <pre id=\"an_out\"></pre>\n  </section>\n\n  <section id=\"settings\" class=\"card\" style=\"display:none;\">\n    <div class=\"row\">\n      <div>\n        <label>Timeframe</label>\n        <select id=\"tf\">\n          <option>H1</option><option selected>H4</option><option>D1</option><option>W1</option>\n        </select>\n      </div>\n      <div>\n        <label>Risk</label>\n        <select id=\"risk\">\n          <option value=\"low\">\u06a9\u0645</option><option value=\"medium\" selected>\u0645\u062a\u0648\u0633\u0637</option><option value=\"high\">\u0632\u06cc\u0627\u062f</option>\n        </select>\n      </div>\n    </div>\n    <label>Style</label>\n    <select id=\"style\">\n      <option value=\"ict\" selected>ICT</option>\n      <option value=\"rtm\">RTM</option>\n      <option value=\"price_action\">\u067e\u0631\u0627\u06cc\u0633 \u0627\u06a9\u0634\u0646</option>\n      <option value=\"general_prompt\">\u067e\u0631\u0627\u0645\u067e\u062a \u0639\u0645\u0648\u0645\u06cc</option>\n      <option value=\"custom_prompt\">\u067e\u0631\u0627\u0645\u067e\u062a \u0627\u062e\u062a\u0635\u0627\u0635\u06cc</option>\n    </select>\n    <label>News</label>\n    <select id=\"news\"><option value=\"false\" selected>\u062e\u0627\u0645\u0648\u0634</option><option value=\"true\">\u0631\u0648\u0634\u0646</option></select>\n    <button onclick=\"saveSettings()\">\u0630\u062e\u06cc\u0631\u0647</button>\n    <pre id=\"set_out\"></pre>\n  </section>\n\n  <section id=\"wallet\" class=\"card\" style=\"display:none;\">\n    <div id=\"walletPublic\"></div>\n    <label>\u0622\u062f\u0631\u0633 \u0628\u0631\u062f\u0627\u0634\u062a BEP20</label>\n    <input id=\"bep20\" placeholder=\"0x...\" />\n    <button onclick=\"saveBep20()\">\u0630\u062e\u06cc\u0631\u0647 BEP20</button>\n    <div style=\"height:12px\"></div>\n    <button onclick=\"requestDeposit()\">\u062f\u0631\u062e\u0648\u0627\u0633\u062a \u0648\u0627\u0631\u06cc\u0632</button>\n    <button onclick=\"requestWithdraw()\" style=\"margin-right:8px\">\u062f\u0631\u062e\u0648\u0627\u0633\u062a \u0628\u0631\u062f\u0627\u0634\u062a</button>\n    <pre id=\"w_out\"></pre>\n  </section>\n</main>\n\n<script>\nconst tg = window.Telegram?.WebApp;\nif (tg) { tg.ready(); tg.expand(); }\n\nfunction getInitData() {\n  return (tg && tg.initData) ? tg.initData : '';\n}\n\nasync function api(path, body) {\n  const res = await fetch('/api' + path, {\n    method: 'POST',\n    headers: { 'Content-Type': 'application/json' },\n    body: JSON.stringify({ initData: getInitData(), ...body }),\n  });\n  return await res.json();\n}\n\nfunction switchTab(id) {\n  for (const el of document.querySelectorAll('section')) el.style.display = 'none';\n  document.getElementById(id).style.display = '';\n  for (const t of document.querySelectorAll('.tab')) t.classList.remove('active');\n  document.querySelector(`.tab[data-tab=\"${id}\"]`).classList.add('active');\n}\n\nasync function loadDash() {\n  const out = await api('/profile', {});\n  document.getElementById('dash').innerHTML = `\n    <h3>\u067e\u0631\u0648\u0641\u0627\u06cc\u0644</h3>\n    <pre>${JSON.stringify(out, null, 2)}</pre>\n    <small>\u0627\u06af\u0631 initData \u0646\u062f\u0627\u0631\u06cc\u062f\u060c \u0627\u06cc\u0646 \u0635\u0641\u062d\u0647 \u0628\u0627\u06cc\u062f \u062f\u0627\u062e\u0644 Telegram WebApp \u0628\u0627\u0632 \u0634\u0648\u062f.</small>\n  `;\n}\n\nasync function loadBanner() {\n  const out = await api('/banner', {});\n  const b = out.banner;\n  const el = document.getElementById('banner');\n  if (b && b.enabled) {\n    el.style.display = '';\n    document.getElementById('bannerText').textContent = b.text || '';\n    const link = document.getElementById('bannerLink');\n    link.href = b.url || '#';\n  } else {\n    el.style.display = 'none';\n  }\n}\n\nasync function runAnalysis() {\n  const market = document.getElementById('mkt').value;\n  const symbol = document.getElementById('sym').value;\n  const out = await api('/analyze', { market, symbol });\n  document.getElementById('an_out').textContent = JSON.stringify(out, null, 2);\n}\n\nasync function saveSettings() {\n  const out = await api('/settings', {\n    timeframe: document.getElementById('tf').value,\n    risk: document.getElementById('risk').value,\n    style: document.getElementById('style').value,\n    news: document.getElementById('news').value === 'true',\n  });\n  document.getElementById('set_out').textContent = JSON.stringify(out, null, 2);\n}\n\nasync function saveBep20() {\n  const bep20 = document.getElementById('bep20').value;\n  const out = await api('/wallet/bep20', { bep20 });\n  document.getElementById('w_out').textContent = JSON.stringify(out, null, 2);\n}\n\nasync function requestDeposit() {\n  const out = await api('/wallet/request', { kind: 'deposit' });\n  document.getElementById('w_out').textContent = JSON.stringify(out, null, 2);\n}\nasync function requestWithdraw() {\n  const out = await api('/wallet/request', { kind: 'withdraw' });\n  document.getElementById('w_out').textContent = JSON.stringify(out, null, 2);\n}\n\n(async () => {\n  await loadBanner();\n  await loadDash();\n  const pub = await api('/wallet/public', {});\n  document.getElementById('walletPublic').innerHTML = `<h3>\u0648\u0644\u062a \u0639\u0645\u0648\u0645\u06cc</h3><pre>${JSON.stringify(pub, null, 2)}</pre>`;\n})();\n</script>\n</body>\n</html>\n";
+export const MINIAPP_HTML = `<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Market IQ</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0a0f1d;
+      --bg-soft: #0f1526;
+      --card: #121a2d;
+      --card-border: rgba(99, 124, 188, 0.2);
+      --card-glow: rgba(30, 64, 175, 0.18);
+      --text: #e7ecf6;
+      --muted: rgba(231, 236, 246, 0.65);
+      --accent: #5b8cff;
+      --accent-2: #22d3ee;
+      --success: #22c55e;
+      --danger: #f97316;
+      --radius: 16px;
+      --shadow: 0 20px 40px rgba(2, 6, 23, 0.55);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: "IRANSansX", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      margin: 0;
+      background: radial-gradient(circle at top, rgba(91, 140, 255, 0.2), transparent 55%), var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      padding: 16px 20px;
+      background: rgba(10, 15, 29, 0.88);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid rgba(99, 124, 188, 0.25);
+    }
+
+    header .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    header .logo {
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      box-shadow: 0 12px 30px rgba(59, 130, 246, 0.35);
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    header p {
+      margin: 2px 0 0;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      background: rgba(17, 24, 39, 0.6);
+      padding: 6px;
+      border-radius: 999px;
+      border: 1px solid rgba(99, 124, 188, 0.25);
+      backdrop-filter: blur(10px);
+    }
+
+    .tab {
+      padding: 8px 14px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .tab.active {
+      background: linear-gradient(135deg, rgba(91, 140, 255, 0.25), rgba(34, 211, 238, 0.2));
+      color: var(--text);
+      border-color: rgba(91, 140, 255, 0.6);
+      box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.15);
+    }
+
+    .card {
+      background: linear-gradient(145deg, rgba(18, 26, 45, 0.95), rgba(12, 18, 32, 0.95));
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 18px;
+      box-shadow: var(--shadow);
+    }
+
+    .stack {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .hero {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: -50px -50px auto auto;
+      width: 160px;
+      height: 160px;
+      background: radial-gradient(circle, rgba(34, 211, 238, 0.25), transparent 70%);
+      pointer-events: none;
+    }
+
+    .hero h2 {
+      margin: 0;
+      font-size: 20px;
+    }
+
+    .hero .meta {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(91, 140, 255, 0.15);
+      border: 1px solid rgba(91, 140, 255, 0.35);
+      font-size: 11px;
+      color: var(--accent);
+    }
+
+    .grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .grid.two {
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+
+    .metric {
+      padding: 14px;
+      border-radius: 14px;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(99, 124, 188, 0.2);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .metric .label {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .metric .value {
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .progress {
+      height: 10px;
+      background: rgba(15, 23, 42, 0.75);
+      border-radius: 999px;
+      overflow: hidden;
+      border: 1px solid rgba(99, 124, 188, 0.25);
+    }
+
+    .progress span {
+      display: block;
+      height: 100%;
+      width: 0;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      transition: width 0.3s ease;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(99, 124, 188, 0.3);
+      background: rgba(10, 15, 29, 0.8);
+      color: var(--text);
+    }
+
+    button {
+      padding: 10px 14px;
+      border: 0;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.1s ease, filter 0.2s ease;
+    }
+
+    button:hover { filter: brightness(1.05); }
+    button:active { transform: scale(0.98); }
+
+    .row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+    }
+
+    pre {
+      white-space: pre-wrap;
+      background: rgba(10, 15, 29, 0.7);
+      border: 1px solid rgba(99, 124, 188, 0.25);
+      padding: 12px;
+      border-radius: 12px;
+      color: var(--muted);
+      min-height: 80px;
+    }
+
+    a { color: #9ec5ff; }
+
+    .banner {
+      border: 1px dashed rgba(91, 140, 255, 0.6);
+      background: rgba(91, 140, 255, 0.12);
+      padding: 12px;
+      border-radius: var(--radius);
+      margin-bottom: 12px;
+      display: none;
+    }
+
+    .chip-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chip {
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(14, 23, 45, 0.8);
+      border: 1px solid rgba(99, 124, 188, 0.25);
+      font-size: 12px;
+    }
+
+    .muted { color: var(--muted); font-size: 12px; }
+  </style>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="logo">IQ</div>
+    <div>
+      <h1>Market IQ</h1>
+      <p>داشبورد هوشمند تحلیل، اشتراک و تنظیمات</p>
+    </div>
+  </div>
+</header>
+<main>
+  <div id="banner" class="banner">
+    <div id="bannerText"></div>
+    <a id="bannerLink" href="#" target="_blank" rel="noreferrer">باز کردن</a>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="dash" onclick="switchTab('dash')">داشبورد</div>
+    <div class="tab" data-tab="analyze" onclick="switchTab('analyze')">تحلیل</div>
+    <div class="tab" data-tab="settings" onclick="switchTab('settings')">تنظیمات</div>
+    <div class="tab" data-tab="wallet" onclick="switchTab('wallet')">کیف پول</div>
+  </div>
+
+  <section id="dash" class="stack">
+    <div class="card hero">
+      <span class="badge">پروفایل کاربری</span>
+      <h2 id="userName">—</h2>
+      <div id="userMeta" class="meta">—</div>
+    </div>
+
+    <div class="grid two">
+      <div class="metric">
+        <div class="label">امتیاز</div>
+        <div id="userPoints" class="value">—</div>
+      </div>
+      <div class="metric">
+        <div class="label">دعوت موفق</div>
+        <div id="userInvites" class="value">—</div>
+      </div>
+      <div class="metric">
+        <div class="label">کمیسیون رفرال</div>
+        <div id="userCommission" class="value">—</div>
+      </div>
+      <div class="metric">
+        <div class="label">اشتراک</div>
+        <div id="userSubscription" class="value">—</div>
+      </div>
+    </div>
+
+    <div class="grid two">
+      <div class="card">
+        <h3 style="margin:0 0 8px">سهمیه روزانه</h3>
+        <div class="progress"><span id="dailyBar"></span></div>
+        <div id="dailyText" class="muted" style="margin-top:8px">—</div>
+      </div>
+      <div class="card">
+        <h3 style="margin:0 0 8px">سهمیه ماهانه</h3>
+        <div class="progress"><span id="monthlyBar"></span></div>
+        <div id="monthlyText" class="muted" style="margin-top:8px">—</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 8px">کدهای رفرال</h3>
+      <div id="refCodes" class="chip-list"></div>
+      <div class="muted" style="margin-top:8px">هر دعوت موفق امتیاز و کمیسیون بیشتری برای شما ایجاد می‌کند.</div>
+    </div>
+  </section>
+
+  <section id="analyze" class="card" style="display:none;">
+    <div class="row">
+      <div>
+        <label>Market</label>
+        <select id="mkt">
+          <option value="crypto">Crypto</option>
+          <option value="forex">Forex</option>
+          <option value="metals">Metals</option>
+          <option value="stocks">Stocks</option>
+        </select>
+      </div>
+      <div>
+        <label>Symbol</label>
+        <input id="sym" placeholder="BTCUSDT / EUR/USD / XAUUSD / AAPL" />
+      </div>
+    </div>
+    <button onclick="runAnalysis()">اجرای تحلیل</button>
+    <pre id="an_out"></pre>
+  </section>
+
+  <section id="settings" class="card" style="display:none;">
+    <div class="row">
+      <div>
+        <label>Timeframe</label>
+        <select id="tf">
+          <option>H1</option><option selected>H4</option><option>D1</option><option>W1</option>
+        </select>
+      </div>
+      <div>
+        <label>Risk</label>
+        <select id="risk">
+          <option value="low">کم</option><option value="medium" selected>متوسط</option><option value="high">زیاد</option>
+        </select>
+      </div>
+    </div>
+    <label>Style</label>
+    <select id="style">
+      <option value="ict" selected>ICT</option>
+      <option value="rtm">RTM</option>
+      <option value="deep">Deep</option>
+      <option value="price_action">پرایس اکشن</option>
+      <option value="general_prompt">پرامپت عمومی</option>
+      <option value="custom_prompt">پرامپت اختصاصی</option>
+    </select>
+    <label>News</label>
+    <select id="news"><option value="false" selected>خاموش</option><option value="true">روشن</option></select>
+    <button onclick="saveSettings()">ذخیره</button>
+    <pre id="set_out"></pre>
+  </section>
+
+  <section id="wallet" class="card" style="display:none;">
+    <div id="walletPublic"></div>
+    <label>آدرس برداشت BEP20</label>
+    <input id="bep20" placeholder="0x..." />
+    <button onclick="saveBep20()">ذخیره BEP20</button>
+    <div style="height:12px"></div>
+    <button onclick="requestDeposit()">درخواست واریز</button>
+    <button onclick="requestWithdraw()" style="margin-right:8px">درخواست برداشت</button>
+    <pre id="w_out"></pre>
+  </section>
+</main>
+
+<script>
+const tg = window.Telegram?.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+
+function getInitData() {
+  return (tg && tg.initData) ? tg.initData : '';
+}
+
+function escapeHtml(text) {
+  return String(text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+async function api(path, body) {
+  const res = await fetch('/api' + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ initData: getInitData(), ...body }),
+  });
+  return await res.json();
+}
+
+function switchTab(id) {
+  for (const el of document.querySelectorAll('section')) el.style.display = 'none';
+  document.getElementById(id).style.display = '';
+  for (const t of document.querySelectorAll('.tab')) t.classList.remove('active');
+  document.querySelector('.tab[data-tab=\"' + id + '\"]').classList.add('active');
+}
+
+function marketLabel(market) {
+  switch (market) {
+    case 'crypto': return 'کریپتو';
+    case 'forex': return 'فارکس';
+    case 'metals': return 'فلزات';
+    case 'stocks': return 'سهام';
+    default: return '—';
+  }
+}
+
+function setBar(id, pct) {
+  const el = document.getElementById(id);
+  if (el) el.style.width = Math.max(0, Math.min(100, pct)) + '%';
+}
+
+async function loadDash() {
+  const out = await api('/profile', {});
+  if (!out.ok) {
+    document.getElementById('dash').innerHTML = '<div class=\"card\">خطا در دریافت اطلاعات. لطفاً داخل تلگرام باز کنید.</div>';
+    return;
+  }
+
+  const user = out.user || {};
+  const quota = out.quota || {};
+  const subActive = user.subEnd && user.subEnd > Date.now();
+  const subLabel = subActive ? ('فعال تا ' + new Date(user.subEnd).toLocaleDateString('fa-IR')) : 'غیرفعال';
+
+  document.getElementById('userName').textContent = user.name || user.firstName || 'کاربر';
+  document.getElementById('userMeta').textContent = 'تجربه: ' + (user.experience || '—') + ' | بازار: ' + marketLabel(user.favoriteMarket) + ' | ریسک: ' + (user.settings?.risk || '—');
+
+  document.getElementById('userPoints').textContent = user.points ?? 0;
+  document.getElementById('userInvites').textContent = user.successfulInvites ?? 0;
+  document.getElementById('userCommission').textContent = (user.commissionPct ?? 0) + '%';
+  document.getElementById('userSubscription').textContent = subLabel;
+
+  const dailyLimit = quota.limitDaily;
+  const monthlyLimit = quota.limitMonthly;
+  const dailyUsed = quota.usedDaily || 0;
+  const monthlyUsed = quota.usedMonthly || 0;
+
+  const dailyPct = dailyLimit === Infinity ? 0 : (dailyUsed / Math.max(1, dailyLimit)) * 100;
+  const monthlyPct = monthlyLimit === Infinity ? 0 : (monthlyUsed / Math.max(1, monthlyLimit)) * 100;
+
+  setBar('dailyBar', dailyPct);
+  setBar('monthlyBar', monthlyPct);
+
+  document.getElementById('dailyText').textContent = dailyLimit === Infinity
+    ? 'نامحدود'
+    : ('باقی‌مانده: ' + (quota.remainingDaily ?? 0) + ' از ' + dailyLimit);
+  document.getElementById('monthlyText').textContent = monthlyLimit === Infinity
+    ? 'نامحدود'
+    : ('باقی‌مانده: ' + (quota.remainingMonthly ?? 0) + ' از ' + monthlyLimit);
+
+  const refCodes = document.getElementById('refCodes');
+  refCodes.innerHTML = '';
+  (user.referralCodes || []).forEach((code) => {
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.textContent = code;
+    refCodes.appendChild(chip);
+  });
+}
+
+async function loadBanner() {
+  const out = await api('/banner', {});
+  const b = out.banner;
+  const el = document.getElementById('banner');
+  if (b && b.enabled) {
+    el.style.display = '';
+    document.getElementById('bannerText').textContent = b.text || '';
+    const link = document.getElementById('bannerLink');
+    link.href = b.url || '#';
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+async function runAnalysis() {
+  const market = document.getElementById('mkt').value;
+  const symbol = document.getElementById('sym').value;
+  const out = await api('/analyze', { market, symbol });
+  document.getElementById('an_out').textContent = JSON.stringify(out, null, 2);
+}
+
+async function saveSettings() {
+  const out = await api('/settings', {
+    timeframe: document.getElementById('tf').value,
+    risk: document.getElementById('risk').value,
+    style: document.getElementById('style').value,
+    news: document.getElementById('news').value === 'true',
+  });
+  document.getElementById('set_out').textContent = JSON.stringify(out, null, 2);
+}
+
+async function saveBep20() {
+  const bep20 = document.getElementById('bep20').value;
+  const out = await api('/wallet/bep20', { bep20 });
+  document.getElementById('w_out').textContent = JSON.stringify(out, null, 2);
+}
+
+async function requestDeposit() {
+  const out = await api('/wallet/request', { kind: 'deposit' });
+  document.getElementById('w_out').textContent = JSON.stringify(out, null, 2);
+}
+async function requestWithdraw() {
+  const out = await api('/wallet/request', { kind: 'withdraw' });
+  document.getElementById('w_out').textContent = JSON.stringify(out, null, 2);
+}
+
+(async () => {
+  await loadBanner();
+  await loadDash();
+  const pub = await api('/wallet/public', {});
+  document.getElementById('walletPublic').innerHTML = '<h3>ولت عمومی</h3><pre>' + escapeHtml(JSON.stringify(pub, null, 2)) + '</pre>';
+})();
+</script>
+</body>
+</html>`;

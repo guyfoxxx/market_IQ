@@ -181,6 +181,7 @@ function styleKeyboard(user: UserProfile) {
   const allowCustom = !!user.customPromptReady;
   const rows: any[] = [
     [{ text: 'ICT', callback_data: 'on:style:ict' }, { text: 'RTM', callback_data: 'on:style:rtm' }],
+    [{ text: 'Deep', callback_data: 'on:style:deep' }],
     [{ text: 'پرایس اکشن', callback_data: 'on:style:price_action' }],
     [{ text: 'پرامپت عمومی', callback_data: 'on:style:general_prompt' }],
     [{ text: allowCustom ? 'پرامپت اختصاصی ✅' : 'پرامپت اختصاصی 🔒', callback_data: allowCustom ? 'on:style:custom_prompt' : 'noop' }],

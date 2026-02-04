@@ -1,0 +1,73 @@
+<svg width="1200" height="720" viewBox="0 0 1200 720" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0b1220"/>
+      <stop offset="100%" stop-color="#0a0f1d"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#5b8cff"/>
+      <stop offset="100%" stop-color="#22d3ee"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="12" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.36 0 0 0 0 0.55 0 0 0 0 1 0 0 0 0.4 0"/>
+      <feBlend in="SourceGraphic" mode="normal"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#5b8cff"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="720" rx="24" fill="url(#bg)"/>
+
+  <text x="60" y="70" fill="#e7ecf6" font-family="Inter, sans-serif" font-size="26" font-weight="700">Market IQ Bot — ساختار تقریبی (همه چیز در یک ماژول Worker)</text>
+  <text x="60" y="105" fill="#9aa5c3" font-family="Inter, sans-serif" font-size="14">ربات تلگرام + مینی‌اپ + پنل ادمین + تحلیل AI + منابع دیتا</text>
+
+  <!-- Center worker -->
+  <rect x="400" y="200" width="400" height="280" rx="22" fill="#121a2d" stroke="#2b3a60" stroke-width="2" filter="url(#glow)"/>
+  <rect x="430" y="230" width="340" height="60" rx="16" fill="url(#accent)"/>
+  <text x="470" y="268" fill="#0b1220" font-family="Inter, sans-serif" font-size="20" font-weight="700">Cloudflare Worker (Core)</text>
+
+  <text x="445" y="315" fill="#e7ecf6" font-family="Inter, sans-serif" font-size="14">• Bot Core / Webhook / Commands</text>
+  <text x="445" y="340" fill="#e7ecf6" font-family="Inter, sans-serif" font-size="14">• Mini App + Admin Panel UI</text>
+  <text x="445" y="365" fill="#e7ecf6" font-family="Inter, sans-serif" font-size="14">• Quota / Referral / Subscription</text>
+  <text x="445" y="390" fill="#e7ecf6" font-family="Inter, sans-serif" font-size="14">• Analysis Engine + Chart Generator</text>
+  <text x="445" y="415" fill="#e7ecf6" font-family="Inter, sans-serif" font-size="14">• Cron Jobs (Custom Prompt)</text>
+
+  <!-- Left side: Telegram -->
+  <rect x="60" y="250" width="260" height="90" rx="16" fill="#0f172a" stroke="#2b3a60" stroke-width="1.5"/>
+  <text x="90" y="300" fill="#e7ecf6" font-family="Inter, sans-serif" font-size="15" font-weight="600">Telegram Users</text>
+  <text x="90" y="322" fill="#9aa5c3" font-family="Inter, sans-serif" font-size="12">/start /signals /settings /profile</text>
+
+  <rect x="60" y="370" width="260" height="90" rx="16" fill="#0f172a" stroke="#2b3a60" stroke-width="1.5"/>
+  <text x="90" y="420" fill="#e7ecf6" font-family="Inter, sans-serif" font-size="15" font-weight="600">Mini App (WebApp)</text>
+  <text x="90" y="442" fill="#9aa5c3" font-family="Inter, sans-serif" font-size="12">Dashboard / Analysis / Settings</text>
+
+  <!-- Right side: Data & AI -->
+  <rect x="880" y="230" width="260" height="90" rx="16" fill="#0f172a" stroke="#2b3a60" stroke-width="1.5"/>
+  <text x="900" y="280" fill="#e7ecf6" font-family="Inter, sans-serif" font-size="15" font-weight="600">AI Providers</text>
+  <text x="900" y="302" fill="#9aa5c3" font-family="Inter, sans-serif" font-size="12">OpenAI • Gemini • Workers AI</text>
+
+  <rect x="880" y="350" width="260" height="110" rx="16" fill="#0f172a" stroke="#2b3a60" stroke-width="1.5"/>
+  <text x="900" y="400" fill="#e7ecf6" font-family="Inter, sans-serif" font-size="15" font-weight="600">Market Data Sources</text>
+  <text x="900" y="422" fill="#9aa5c3" font-family="Inter, sans-serif" font-size="12">Binance • Yahoo • TwelveData</text>
+  <text x="900" y="442" fill="#9aa5c3" font-family="Inter, sans-serif" font-size="12">AlphaVantage • Finnhub • Polygon</text>
+
+  <!-- Bottom: Storage & Queue -->
+  <rect x="360" y="520" width="220" height="90" rx="16" fill="#0f172a" stroke="#2b3a60" stroke-width="1.5"/>
+  <text x="390" y="570" fill="#e7ecf6" font-family="Inter, sans-serif" font-size="15" font-weight="600">KV Storage</text>
+  <text x="390" y="592" fill="#9aa5c3" font-family="Inter, sans-serif" font-size="12">Profiles / Prompts / Payments</text>
+
+  <rect x="620" y="520" width="220" height="90" rx="16" fill="#0f172a" stroke="#2b3a60" stroke-width="1.5"/>
+  <text x="650" y="570" fill="#e7ecf6" font-family="Inter, sans-serif" font-size="15" font-weight="600">Queue + Cron</text>
+  <text x="650" y="592" fill="#9aa5c3" font-family="Inter, sans-serif" font-size="12">Signals + Custom Prompt</text>
+
+  <!-- Arrows -->
+  <path d="M320 295 L400 295" stroke="#5b8cff" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M320 415 L400 415" stroke="#5b8cff" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M800 275 L880 275" stroke="#5b8cff" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M800 405 L880 405" stroke="#5b8cff" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M510 480 L470 520" stroke="#5b8cff" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M690 480 L730 520" stroke="#5b8cff" stroke-width="2" marker-end="url(#arrow)"/>
+
+</svg>

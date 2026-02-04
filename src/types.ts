@@ -6,6 +6,7 @@ export type Risk = 'low' | 'medium' | 'high';
 export type Style =
   | 'rtm'
   | 'ict'
+  | 'deep'
   | 'price_action'
   | 'general_prompt'
   | 'custom_prompt';
