@@ -19,7 +19,15 @@
     pre { white-space: pre-wrap; background:#0b1220; border:1px solid #223055; padding:10px; border-radius:10px; }
     a { color: #93c5fd; }
     .banner { border: 1px dashed #3b82f6; background: rgba(59,130,246,0.12); padding: 12px; border-radius: 14px; margin-bottom: 12px; display:none;}
-  </style>
+  
+    button { transition: transform .06s ease, filter .2s ease; }
+    button:active { transform: scale(0.98); }
+    button:hover { filter: brightness(1.05); }
+    .tab { transition: transform .06s ease, filter .2s ease; }
+    .tab:active { transform: scale(0.98); }
+    .card { box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+    .muted { color: rgba(233,238,249,.72); font-size: 12px; }
+</style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
