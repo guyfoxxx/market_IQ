@@ -5,6 +5,7 @@ import { callAI, extractJsonBlock } from "./lib/ai";
 import { quickChartUrl, type Zone } from "./lib/chart";
 import { getUser, getPromptBase, getPromptStyle } from "./lib/storage";
 import { consume } from "./lib/quota";
+import { escapeHtml } from "./lib/utils";
 import { buildAnalysisPrompt } from "./lib/prompts";
 import { analysisCacheKey, getJson, putJson } from "./lib/cache";
 
@@ -137,7 +138,7 @@ export async function handleJob(env: Env, job: Job) {
     `بازار: <b>${job.market}</b> | نماد: <b>${job.symbol}</b> | تایم‌فریم: <b>${job.timeframe}</b>\n` +
     `دیتا: <code>${dataSource}</code>`;
 
-  const tailJson = `\n\n<code>${JSON.stringify({ zones })}</code>`;
+  const tailJson = `\n\n<code>${escapeHtml(JSON.stringify({ zones }))}</code>`;
 
   if (chart) {
     await sendPhoto(env, job.chatId, chart, header);
