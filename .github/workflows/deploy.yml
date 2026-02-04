@@ -15,7 +15,6 @@ jobs:
           node-version: 20
       - name: Install dependencies  
         run: npm install --no-audit --no-fund
-        run: npm i -D @cloudflare/workers-types
       - name: Deploy
         run: npx wrangler deploy --minify
         env:
