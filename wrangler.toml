@@ -1,4 +1,4 @@
-name = "valinaf25-telegram-signal-bot"
+name = "marketiq"
 main = "src/index.ts"
 compatibility_date = "2026-02-04"
 compatibility_flags = ["nodejs_compat"]
