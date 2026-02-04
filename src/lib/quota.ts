@@ -16,28 +16,34 @@ export function isOwner(u: UserProfile, env: Env): boolean {
 }
 
 export async function ensureQuotaReset(env: Env, u: UserProfile) {
-  // Backward compatibility: old user records might miss quota
+  // Fully defensive: some old KV records may miss quota or its fields.
   const anyU: any = u as any;
-  if (!anyU.quota) {
+  if (!anyU.quota || typeof anyU.quota !== "object") {
     anyU.quota = { dailyUsed: 0, monthlyUsed: 0, lastDailyReset: todayUtc(), lastMonthlyReset: monthUtc() };
   }
-  if (anyU.quota.dailyUsed == null) anyU.quota.dailyUsed = 0;
-  if (anyU.quota.monthlyUsed == null) anyU.quota.monthlyUsed = 0;
-  if (!anyU.quota.lastDailyReset) anyU.quota.lastDailyReset = todayUtc();
-  if (!anyU.quota.lastMonthlyReset) anyU.quota.lastMonthlyReset = monthUtc();
+  const q: any = anyU.quota;
+
+  if (q.dailyUsed == null) q.dailyUsed = 0;
+  if (q.monthlyUsed == null) q.monthlyUsed = 0;
+  if (!q.lastDailyReset) q.lastDailyReset = todayUtc();
+  if (!q.lastMonthlyReset) q.lastMonthlyReset = monthUtc();
 
   const today = todayUtc();
   const month = monthUtc();
-  if (u.quota.lastDailyReset !== today) {
-    u.quota.lastDailyReset = today;
-    u.quota.dailyUsed = 0;
+
+  if (q.lastDailyReset !== today) {
+    q.lastDailyReset = today;
+    q.dailyUsed = 0;
   }
-  if (u.quota.lastMonthlyReset !== month) {
-    u.quota.lastMonthlyReset = month;
-    u.quota.monthlyUsed = 0;
+  if (q.lastMonthlyReset !== month) {
+    q.lastMonthlyReset = month;
+    q.monthlyUsed = 0;
   }
-  await putUser(env, u);
+
+  // Ensure we persist the repaired structure so the next update won't crash
+  await putUser(env, anyU as UserProfile);
 }
+
 
 export function getLimits(env: Env, u: UserProfile) {
   if (isAdmin(u, env)) {

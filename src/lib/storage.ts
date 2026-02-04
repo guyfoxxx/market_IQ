@@ -28,6 +28,9 @@ function hydrateUser(env: Env, u: any): { u: UserProfile; changed: boolean } {
   if (!u || typeof u !== "object") {
     return { u: u as UserProfile, changed: false };
   }
+  if (u.id == null) {
+    return { u: u as UserProfile, changed: false };
+  }
 
   if (!u.createdAt) { u.createdAt = nowIso(); changed = true; }
   if (!u.role) { u.role = "USER"; changed = true; }
