@@ -253,9 +253,7 @@ ${wallet ?? "❌ ولت تنظیم نشده"}
     const u = requireUser(ctx);
     const txid = (ctx.message?.text ?? "").split(" ").slice(1).join(" ").trim();
     if (!txid || !isValidTxid(txid)) {
-      await ctx.reply("فرمت TxID معتبر نیست. مثال:
-/tx 0xabc123...");
-      return;
+      await ctx.reply(`فرمت TxID معتبر نیست. مثال:\n/tx 0xabc123...`);      return;
     }
     const exists = await getPayment(env, txid);
     if (exists) {
