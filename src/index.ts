@@ -15,8 +15,9 @@ function getBot(env: Env) {
 }
 
 function isTelegramWebhook(req: Request, env: Env) {
+  if (!env.WEBHOOK_SECRET) return true;
   const secret = req.headers.get("x-telegram-bot-api-secret-token") || "";
-  return secret && env.WEBHOOK_SECRET && secret === env.WEBHOOK_SECRET;
+  return secret === env.WEBHOOK_SECRET;
 }
 
 export default {
