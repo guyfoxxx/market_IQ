@@ -57,7 +57,7 @@ export function adminHtml() {
 
 <div class="card">
   <h3 style="margin:0 0 8px">پرامپت‌ها</h3>
-  <div class="muted">type: base | vision | style:PA | style:ICT | style:ATR</div>
+  <div class="muted">type: base | vision | style:RTM | style:ICT | style:PA | style:GENERAL</div>
   <input id="ptype" placeholder="base" />
   <textarea id="ptext" rows="6" placeholder="متن پرامپت"></textarea>
   <button style="margin-top:10px" id="setPrompt">ثبت</button>

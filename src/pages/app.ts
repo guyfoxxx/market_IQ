@@ -89,9 +89,10 @@ export function appHtml(env: Env) {
         <option value="HIGH">ریسک زیاد</option>
       </select>
       <select id="style">
-        <option value="PA">پرایس اکشن (Ali Flah)</option>
-        <option value="ICT">ICT / Smart Money</option>
-        <option value="ATR">ATR / Volatility</option>
+        <option value="GENERAL">پرامپت عمومی</option>
+        <option value="RTM">RTM</option>
+        <option value="ICT">ICT</option>
+        <option value="PA">پرایس اکشن</option>
         <option value="CUSTOM">پرامپت اختصاصی</option>
       </select>
       <select id="news">
