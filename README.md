@@ -135,4 +135,3 @@ npm run set-webhook
 - ICT (Smart Money)
 - ATR (Volatility/ATR)
 - CUSTOM (بعد از ساخت پرامپت اختصاصی)
-# bazariq # bazariq
