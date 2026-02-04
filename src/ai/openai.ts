@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '../utils';
 export async function openaiChat(opts: {
   apiKey: string;
   baseUrl: string;
@@ -6,7 +7,7 @@ export async function openaiChat(opts: {
   user: string;
   temperature?: number;
 }) {
-  const res = await fetch(`${opts.baseUrl.replace(/\/$/, '')}/chat/completions`, {
+  const res = await fetchWithTimeout(`${opts.baseUrl.replace(/\/$/, '')}/chat/completions`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${opts.apiKey}`,
@@ -20,13 +21,13 @@ export async function openaiChat(opts: {
         { role: 'user', content: opts.user },
       ],
     }),
-  });
+  }, 15_000);
 
   if (!res.ok) {
     const t = await res.text();
     throw new Error(`OpenAI-compatible error: ${res.status} ${t}`);
   }
-  const data = (await res.json()) as any;
+  const data = await res.json() as any;
   const text = data?.choices?.[0]?.message?.content;
   if (!text) throw new Error('OpenAI-compatible: empty response');
   return String(text);

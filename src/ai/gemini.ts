@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '../utils';
 export async function geminiGenerate(opts: {
   apiKey: string;
   model: string;
@@ -20,20 +21,20 @@ export async function geminiGenerate(opts: {
     },
   };
 
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'x-goog-api-key': opts.apiKey,
     },
     body: JSON.stringify(body),
-  });
+  }, 15_000);
 
   if (!res.ok) {
     const t = await res.text();
     throw new Error(`Gemini error: ${res.status} ${t}`);
   }
-  const data = (await res.json()) as any;
+  const data = await res.json() as any;
   const text = data?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join('')?.trim();
   if (!text) throw new Error('Gemini: empty response');
   return text;
