@@ -35,6 +35,7 @@ import { fmtDateIso, isValidTxid, nowIso, parseFloatSafe, parseIntSafe,
 
 
 
+
 type MyContext = Context & {
   env: Env;
   user?: UserProfile;
@@ -72,87 +73,88 @@ async function setState(env: Env, userId: number, state: FlowState | null) {
 
 function mainMenuKb() {
   return new InlineKeyboard()
-    .text("📈 تحلیل/سیگنال", "menu:signals")
-    .text("⚙️ تنظیمات", "menu:settings")
-    .row()
-    .text("👤 پروفایل", "menu:profile")
-    .text("💳 خرید اشتراک", "menu:buy")
-    .row()
-    .text("🎁 رفرال", "menu:ref")
-    .text("🧠 تعیین سطح", "menu:level")
-    .row()
-    .text("🆘 پشتیبانی", "menu:support")
-    .text("📚 آموزش", "menu:education")
-    .row()
-    .text("📱 Mini App", "menu:app");
+    .text("📊 تحلیل / سیگنال", "go:signals").row()
+    .text("⚙️ تنظیمات", "go:settings").text("👤 پروفایل", "go:profile").row()
+    .text("💳 خرید اشتراک", "go:buy").text("🎁 رفرال", "go:ref").row()
+    .text("🏦 کیف پول", "go:wallet").text("🆘 پشتیبانی", "go:support");
 }
 
-function toMarketLabel(m: Market) {
-  return m === "CRYPTO" ? "کریپتو" : m === "FOREX" ? "فارکس" : m === "METALS" ? "فلزات" : "سهام";
-}
-
-function settingsText(u: UserProfile) {
-  return `⚙️ تنظیمات فعلی:
-• تایم‌فریم: ${u.settings.timeframe}
-• ریسک: ${u.settings.risk}
-• سبک: ${u.settings.style}
-• خبر: ${u.settings.news}`;
-}
-
-function settingsKb(u: UserProfile) {
+function settingsKb(current: { tf: Timeframe; risk: Risk; style: Style; news: "ON" | "OFF" }) {
   const kb = new InlineKeyboard()
-    .text("TF: M15", "set:tf:M15").text("TF: H1", "set:tf:H1").row()
-    .text("TF: H4", "set:tf:H4").text("TF: D1", "set:tf:D1").row()
-    .text("ریسک کم", "set:risk:LOW").text("ریسک متوسط", "set:risk:MEDIUM").text("ریسک زیاد", "set:risk:HIGH").row()
-    .text("GENERAL", "set:style:GENERAL").text("PA", "set:style:PA").text("ICT", "set:style:ICT").row()
-    .text("ATR", "set:style:ATR").text("RTM", "set:style:RTM").text("CUSTOM", "set:style:CUSTOM").row()
-    .text("News ON", "set:news:ON").text("News OFF", "set:news:OFF").row()
-    .text("⬅️ منو", "menu:home");
+    .text(`⏱ TF: ${current.tf}`, "set:tf").row()
+    .text(`⚖️ ریسک: ${current.risk}`, "set:risk").row()
+    .text(`🎯 سبک: ${current.style}`, "set:style").row()
+    .text(`📰 خبر: ${current.news}`, "set:news").row()
+    .text("🔙 منو", "go:menu");
   return kb;
 }
 
-function requireUser(ctx: MyContext): UserProfile {
-  if (!ctx.user) throw new Error("Missing user in context");
-  return ctx.user;
+function tfKb() {
+  const tfs: Timeframe[] = ["M15", "H1", "H4", "D1"];
+  const kb = new InlineKeyboard();
+  for (const tf of tfs) kb.text(tf, `tf:${tf}`);
+  kb.row().text("🔙 برگشت", "set:back");
+  return kb;
+}
+function riskKb() {
+  const risks: Risk[] = ["LOW", "MEDIUM", "HIGH"];
+  const kb = new InlineKeyboard();
+  for (const r of risks) kb.text(r, `risk:${r}`);
+  kb.row().text("🔙 برگشت", "set:back");
+  return kb;
+}
+function styleKb(u: UserProfile) {
+  const styles: Style[] = ["PRICE_ACTION", "ICT", "ATR"];
+  const kb = new InlineKeyboard();
+  kb.text("پرایس اکشن", "style:PRICE_ACTION").row();
+  kb.text("ICT (Smart Money)", "style:ICT").row();
+  kb.text("ATR Quant", "style:ATR").row();
+  if (u.customPrompt?.ready) kb.text("پرامپت اختصاصی", "style:CUSTOM").row();
+  kb.row().text("🔙 برگشت", "set:back");
+  return kb;
 }
 
-async function notifyAdmins(env: Env, bot: Bot<MyContext>, text: string) {
-  const ids = (env.ADMIN_IDS ?? "").split(",").map(s => s.trim()).filter(Boolean).map(Number);
-  const owner = env.OWNER_ID ? Number(env.OWNER_ID) : undefined;
-  const targets = new Set<number>(ids);
-  if (owner) targets.add(owner);
-  for (const id of targets) {
-    try { await bot.api.sendMessage(id, text); } catch {}
-  }
+function marketKb() {
+  const kb = new InlineKeyboard()
+    .text("🪙 Crypto", "mkt:CRYPTO").text("💱 Forex", "mkt:FOREX").row()
+    .text("🥇 Metals", "mkt:METALS").text("📈 Stocks", "mkt:STOCKS").row()
+    .text("🔙 منو", "go:menu");
+  return kb;
 }
 
+function onboardingContactKb() {
+  return new Keyboard()
+    .requestContact("📱 Share Contact")
+    .resized()
+    .oneTime();
+}
+
+function stripDangerousTags(html: string) {
+  // whitelist tags: b, i, u, code, pre, a
+  // But safest is to escape everything for dynamic content. This helper is minimal.
+  return html;
+}
 
 async function safeReplyPlain(ctx: any, text: string, extra: any = {}) {
   return ctx.reply(text, { disable_web_page_preview: true, ...extra });
 }
 
 async function safeReply(ctx: any, text: string, extra: any = {}) {
-  return safeReply(ctx, text, { parse_mode: "HTML", disable_web_page_preview: true, ...extra });
+  return ctx.reply(text, { parse_mode: "HTML", disable_web_page_preview: true, ...extra });
 }
 async function safeEdit(ctx: any, text: string, extra: any = {}) {
-  return safeEdit(ctx, text, { parse_mode: "HTML", disable_web_page_preview: true, ...extra });
+  return ctx.editMessageText(text, { parse_mode: "HTML", disable_web_page_preview: true, ...extra });
 }
 
+
 async function showMenu(ctx: any, env: Env) {
-   const u = await ensureUser(env, ctx.from!);
-   await ensureQuotaReset(env, u);
-
-   const text =
-     `Market IQ ✅\n\n` +
-
+  const u = await ensureUser(env, ctx.from!);
   await ensureQuotaReset(env, u);
-
-  const displayName = u.name || u.firstName || "";
 
   const text =
     `Market IQ ✅\n\n` +
-    `👋 خوش آمدی ${displayName}\n\n` +
-    `از منوی زیر انتخاب کن یا یکی از دستورها رو بزن:\n\n` +
+    `👋 خوش آمدی ${u.profile?.name ? u.profile.name : ""}\n\n` +
+    `📌 دستورات اصلی:\n` +
     `• /signals  تحلیل و سیگنال\n` +
     `• /settings  تنظیمات\n` +
     `• /profile  پروفایل و سهمیه\n` +
@@ -160,866 +162,471 @@ async function showMenu(ctx: any, env: Env) {
     `• /wallet  آدرس ولت\n` +
     `• /ref  رفرال و امتیاز\n` +
     `• /support  پشتیبانی\n\n` +
-    `شروع تحلیل: /signals`;
+    `💡 برای شروع تحلیل: /signals`;
 
-  await safeReplyPlain(ctx, text, { reply_markup: mainMenuKb() });
+  try {
+    await safeReplyPlain(ctx, text, { reply_markup: mainMenuKb() });
+  } catch {
+    await safeReplyPlain(ctx, text);
+  }
 }
 
-export function createBot(env: Env) {
-  const bot = new Bot<MyContext>(env.BOT_TOKEN, { botInfo: JSON.parse(env.BOT_INFO || "{}") });
+async function showProfile(ctx: any, env: Env) {
+  const u = await ensureUser(env, ctx.from!);
+  await ensureQuotaReset(env, u);
+  const rem = await remaining(env, u);
+  const sub = u.subscription?.active ? `✅ فعال تا ${u.subscription.expiresAt}` : "❌ غیرفعال";
+  const points = u.points ?? 0;
+  const invites = u.referrals?.successCount ?? 0;
+  const msg =
+    `<b>👤 پروفایل Market IQ</b>\n\n` +
+    `• نام: <code>${escapeHtml(u.profile?.name ?? "-")}</code>\n` +
+    `• شماره: <code>${escapeHtml(u.profile?.phone ?? "-")}</code>\n` +
+    `• اشتراک: ${sub}\n\n` +
+    `<b>⚡ سهمیه</b>\n` +
+    `• روزانه: <code>${rem.dailyLeft}</code>\n` +
+    `• ماهانه: <code>${rem.monthlyLeft}</code>\n\n` +
+    `<b>🎁 امتیاز و دعوت</b>\n` +
+    `• امتیاز: <code>${points}</code>\n` +
+    `• دعوت موفق: <code>${invites}</code>\n`;
+  await safeReply(ctx, msg, { reply_markup: mainMenuKb() });
+}
 
-  bot.use(async (ctx, next) => {
-    ctx.env = env;
-    if (ctx.from) {
-      ctx.user = await ensureUser(env, {
-        id: ctx.from.id,
-        username: ctx.from.username,
-        firstName: ctx.from.first_name,
-      });
-    }
-    await next();
-  });
+async function showWallet(ctx: any, env: Env) {
+  const w = await getPublicWallet(env);
+  const msg = `<b>🏦 آدرس ولت عمومی</b>\n\n<code>${escapeHtml(w ?? "تنظیم نشده")}</code>`;
+  await safeReply(ctx, msg, { reply_markup: mainMenuKb() });
+}
 
-  bot.catch(async (err) => {
-    console.log("BOT ERROR", err.error);
-    try {
-      await err.safeReply(ctx, "❌ خطای داخلی رخ داد. لطفاً دوباره تلاش کنید یا /support را بزنید.");
-    } catch {}
-  });
+async function showSupport(ctx: any) {
+  const msg =
+    `<b>🆘 پشتیبانی</b>\n\n` +
+    `برای تماس با پشتیبانی پیام خود را ارسال کنید.\n` +
+    `در صورت نیاز ادمین به شما پاسخ می‌دهد.`;
+  await safeReply(ctx, msg, { reply_markup: mainMenuKb() });
+}
 
-  // Commands
-  bot.command(["start", "menu"], async (ctx) => {
-    const u = requireUser(ctx);
-    // referral: /start CODE
-    const text = ctx.message?.text ?? "";
-    const code = text.split(" ")[1]?.trim();
-    if (code) {
-      const referrerId = await getReferrerByCode(env, code);
-      if (referrerId && referrerId !== u.id && !u.referrerId) {
-        u.referrerId = referrerId;
-        await putUser(env, u);
-      }
-    }
+async function showRef(ctx: any, env: Env) {
+  const u = await ensureUser(env, ctx.from!);
+  const codes = u.referrals?.codes ?? [];
+  const msg =
+    `<b>🎁 رفرال</b>\n\n` +
+    `کدهای شما:\n` +
+    codes.map((c) => `• <code>${escapeHtml(c)}</code>`).join("\n") +
+    `\n\nدعوت موفق: <code>${u.referrals?.successCount ?? 0}</code>\n` +
+    `امتیاز: <code>${u.points ?? 0}</code>\n\n` +
+    `برای استفاده از رفرال، لینک/کد را به دوست‌تان بدهید تا وارد ربات شود و Share Contact بزند.`;
+  await safeReply(ctx, msg, { reply_markup: mainMenuKb() });
+}
 
-    if (!u.name) {
-      await setState(env, u.id, { flow: "onboarding", step: "ask_name" });
-      await safeReply(ctx, "👤 لطفاً نام خود را ارسال کنید:");
-      return;
-    }
-    if (!u.phone) {
-      await setState(env, u.id, { flow: "onboarding", step: "ask_contact" });
-      const kb = new Keyboard().requestContact("📞 ارسال شماره (Share Contact)").resized().oneTime();
-      await safeReply(ctx, "📞 برای ادامه، لطفاً شماره خود را Share کنید:", { reply_markup: kb });
-      return;
-    }
-    await showMenu(ctx);
-  });
+async function showSettings(ctx: any, env: Env) {
+  const u = await ensureUser(env, ctx.from!);
+  const msg =
+    `<b>⚙️ تنظیمات</b>\n\n` +
+    `• TF: <code>${u.settings.timeframe}</code>\n` +
+    `• ریسک: <code>${u.settings.risk}</code>\n` +
+    `• سبک: <code>${u.settings.style}</code>\n` +
+    `• خبر: <code>${u.settings.news}</code>\n`;
+  await safeReply(ctx, msg, { reply_markup: settingsKb(u.settings) });
+}
 
-  bot.command("signals", async (ctx) => {
-    const u = requireUser(ctx);
-    await setState(env, u.id, { flow: "signals", step: "choose_market" });
-    const kb = new InlineKeyboard()
-      .text("CRYPTO", "sig:market:CRYPTO")
-      .text("FOREX", "sig:market:FOREX")
-      .row()
-      .text("METALS", "sig:market:METALS")
-      .text("STOCKS", "sig:market:STOCKS")
-      .row()
-      .text("⬅️ منو", "menu:home");
-    await safeReply(ctx, "بازار را انتخاب کن:", { reply_markup: kb });
-  });
+async function startSignalsFlow(ctx: any, env: Env) {
+  const u = await ensureUser(env, ctx.from!);
+  await ensureQuotaReset(env, u);
+  await setState(env, u.userId, { flow: "signals", step: "pick_market" });
+  await safeReply(ctx, `<b>📊 تحلیل / سیگنال</b>\n\nبازار را انتخاب کنید:`, { reply_markup: marketKb() });
+}
 
-  bot.command("settings", async (ctx) => {
-    const u = requireUser(ctx);
-    await safeReply(ctx, settingsText(u), { reply_markup: settingsKb(u) });
-  });
+async function handleSignalsText(ctx: any, env: Env, text: string) {
+  const u = await ensureUser(env, ctx.from!);
+  const st = await getState(env, u.userId);
+  if (!st || st.flow !== "signals") return;
 
-  bot.command("profile", async (ctx) => {
-    const u = requireUser(ctx);
-    await ensureQuotaReset(env, u);
-    const q = remaining(env, u);
-    const subActive = u.subscription.active && u.subscription.expiresAt && Date.parse(u.subscription.expiresAt) > Date.now();
-    const wallet = await getPublicWallet(env);
-
-    const txt = `👤 پروفایل
-• نام: ${u.name || "—"}
-• شماره: ${u.phone || "—"}
-• تجربه: ${u.experience || "—"}
-• بازار علاقه‌مند: ${u.favoriteMarket ? toMarketLabel(u.favoriteMarket) : "—"}
-
-⭐ امتیاز: ${u.points}
-👥 دعوت موفق: ${u.successfulInvites}
-💰 کمیسیون رفرال: ${u.referralCommissionPct}% 
-
-📌 سهمیه:
-• روزانه مصرف‌شده: ${u.quota.dailyUsed} | باقی‌مانده: ${q.dailyLeft === Infinity ? "نامحدود" : q.dailyLeft}
-• ماهانه مصرف‌شده: ${u.quota.monthlyUsed} | باقی‌مانده: ${q.monthLeft === Infinity ? "نامحدود" : q.monthLeft}
-
-💳 اشتراک: ${subActive ? "فعال ✅" : "غیرفعال ❌"}
-• انقضا: ${subActive ? fmtDateIso(u.subscription.expiresAt, env.TZ) : "-"}
-
-🏦 ولت عمومی: ${wallet ?? "تنظیم نشده"}
-`;
-    await safeReply(ctx, txt, { reply_markup: mainMenuKb() });
-  });
-
-  bot.command(["buy", "pay"], async (ctx) => {
-    const price = env.SUB_PRICE_USDT ?? "29";
-    const days = env.SUB_DURATION_DAYS ?? "30";
-    const wallet = await getPublicWallet(env);
-    await safeReply(ctx, 
-      `💳 خرید اشتراک
-
-• قیمت: ${price} USDT
-• مدت: ${days} روز
-
-` +
-      `1) مبلغ را به ولت زیر ارسال کنید:
-${wallet ?? "❌ ولت تنظیم نشده"}
-
-` +
-      `2) سپس TxID را ثبت کنید:
-/tx YOUR_TXID`,
-      { reply_markup: mainMenuKb() }
+  if (st.step === "ask_symbol") {
+    const symbol = text.trim().toUpperCase();
+    st.data = { ...(st.data ?? {}), symbol };
+    st.step = "confirm";
+    await setState(env, u.userId, st);
+    await safeReply(ctx,
+      `<b>✅ تایید</b>\n\n` +
+      `بازار: <code>${escapeHtml(st.data.market)}</code>\n` +
+      `نماد: <code>${escapeHtml(symbol)}</code>\n` +
+      `تایم‌فریم: <code>${u.settings.timeframe}</code>\n\n` +
+      `برای شروع تحلیل روی دکمه زیر بزنید.`,
+      { reply_markup: new InlineKeyboard().text("🚀 شروع تحلیل", "sig:run").row().text("🔙 منو", "go:menu") }
     );
-  });
-
-  
-
+    return;
+  }
+}
 
 async function showBuy(ctx: any, env: Env) {
   const plans = await getPlans(env);
-  const wallet = await getPublicWallet(env);
-
+  if (!plans?.length) {
+    await safeReply(ctx, "❌ هیچ پلنی تعریف نشده است. با ادمین تماس بگیرید.", { reply_markup: mainMenuKb() });
+    return;
+  }
   const kb = new InlineKeyboard();
   for (const p of plans) {
-    kb.text(`${p.title} • ${p.priceUsdt} USDT`, `plan:${p.id}`).row();
+    kb.text(`${p.title} — ${p.price} ${p.currency}`, `plan:${p.id}`).row();
   }
-  kb.url("💬 پشتیبانی", "https://t.me/").row();
-  kb.text("🔄 رفرش پلن‌ها", "planlist");
-
-  const w = wallet ? `<code>${wallet}</code>` : "هنوز تنظیم نشده";
-  const text =
-    `💳 <b>خرید اشتراک Market IQ</b>\n\n` +
-    `۱) یک پلن را انتخاب کن:\n` +
-    `۲) به آدرس ولت زیر USDT (BEP20) واریز کن:\n${w}\n\n` +
-    `۳) بعد از پرداخت، TxID را ارسال کن:\n<code>/tx YOUR_TXID</code>\n\n` +
-    `اگر پلن انتخاب کردی، نیاز نیست PLAN_ID بفرستی.`;
-
-  await safeReply(ctx, text, { parse_mode: "HTML", reply_markup: kb, disable_web_page_preview: true });
+  kb.text("🔙 منو", "go:menu");
+  await safeReply(ctx, `<b>💳 خرید اشتراک</b>\n\nیک پلن را انتخاب کنید:`, { reply_markup: kb });
 }
 
-bot.command("buy", async (ctx) => showBuy(ctx, env));
-bot.command("pay", async (ctx) => showBuy(ctx, env));
+async function handlePlanSelected(ctx: any, env: Env, planId: string) {
+  const u = await ensureUser(env, ctx.from!);
+  const p = await findPlan(env, planId);
+  if (!p) {
+    await safeReply(ctx, "❌ پلن نامعتبر است.", { reply_markup: mainMenuKb() });
+    return;
+  }
+  await setSelectedPlan(env, u.userId, planId);
+  const w = await getPublicWallet(env);
+  const msg =
+    `<b>✅ پلن انتخاب شد</b>\n\n` +
+    `پلن: <code>${escapeHtml(p.title)}</code>\n` +
+    `قیمت: <code>${escapeHtml(String(p.price))} ${escapeHtml(p.currency)}</code>\n` +
+    `مدت: <code>${escapeHtml(String(p.days))} روز</code>\n\n` +
+    `<b>🏦 آدرس پرداخت</b>\n<code>${escapeHtml(w ?? "تنظیم نشده")}</code>\n\n` +
+    `بعد از پرداخت روی دکمه زیر بزنید:`;
+  const kb = new InlineKeyboard()
+    .text("✅ پرداخت کردم", "paydone").row()
+    .text("🔙 برگشت به پلن‌ها", "planlist").row()
+    .text("🔙 منو", "go:menu");
+  await safeEdit(ctx, msg, { reply_markup: kb });
+}
 
-bot.command("pay", async (ctx) => {
-  await safeReply(ctx, "برای خرید اشتراک از دستور /buy استفاده کنید.");
-});
+async function handlePayDone(ctx: any) {
+  const msg =
+    `<b>✅ عالی!</b>\n\n` +
+    `حالا TxID پرداخت را ارسال کنید:\n` +
+    `<code>/tx YOUR_TXID</code>\n\n` +
+    `مثال:\n<code>/tx 0xabc123...</code>`;
+  await safeEdit(ctx, msg, { reply_markup: new InlineKeyboard().text("🔙 منو", "go:menu") });
+}
 
-bot.command("tx", async (ctx) => {
-    const u = requireUser(ctx);
-    const parts = (ctx.message?.text ?? "").trim().split(/\s+/).slice(1);
-    const txid = (parts[0] || "").trim();
-    const planId = (parts[1] || "").trim();
-    if (!txid || !isValidTxid(txid)) {
-      await safeReply(ctx, `فرمت TxID معتبر نیست. مثال:
-/tx 0xabc123...`);
-      return;
+async function handleTx(ctx: any, env: Env, txid: string) {
+  const u = await ensureUser(env, ctx.from!);
+  if (!isValidTxid(txid)) {
+    await safeReply(ctx, "❌ TxID معتبر نیست. مثال: /tx 0xabc...", { reply_markup: mainMenuKb() });
+    return;
+  }
+  const sel = u.selectedPlanId;
+  if (!sel) {
+    await safeReply(ctx, "❌ ابتدا یک پلن را از /buy انتخاب کنید.", { reply_markup: mainMenuKb() });
+    return;
+  }
+  const p = await findPlan(env, sel);
+  if (!p) {
+    await safeReply(ctx, "❌ پلن انتخاب‌شده یافت نشد. دوباره /buy را بزنید.", { reply_markup: mainMenuKb() });
+    return;
+  }
+
+  await putPayment(env, {
+    txid,
+    userId: u.userId,
+    planId: sel,
+    status: "PENDING",
+    createdAt: nowIso(),
+  });
+
+  const msg =
+    `<b>✅ ثبت شد</b>\n\n` +
+    `TxID: <code>${escapeHtml(txid)}</code>\n` +
+    `وضعیت: <b>PENDING</b>\n\n` +
+    `بعد از تایید ادمین، اشتراک شما فعال می‌شود.`;
+  await safeReply(ctx, msg, { reply_markup: mainMenuKb() });
+
+  // notify admins/owner
+  const notify =
+    `💳 درخواست پرداخت جدید\n` +
+    `کاربر: ${u.userId}\n` +
+    `پلن: ${p.title}\n` +
+    `TxID: ${txid}\n\n` +
+    `برای تایید: /approve ${txid}\n` +
+    `برای رد: /reject ${txid}`;
+  for (const id of env.ADMIN_IDS?.split(",").map((x) => parseIntSafe(x)).filter(Boolean) ?? []) {
+    try {
+      await ctx.api.sendMessage(id as any, notify);
+    } catch {}
+  }
+  if (env.OWNER_ID) {
+    try {
+      await ctx.api.sendMessage(parseIntSafe(env.OWNER_ID) as any, notify);
+    } catch {}
+  }
+}
+
+async function adminPayments(ctx: any, env: Env) {
+  const u = await ensureUser(env, ctx.from!);
+  if (!isAdmin(env, u.userId) && !isOwner(env, u.userId)) {
+    await safeReply(ctx, "⛔ دسترسی ندارید.");
+    return;
+  }
+  const pay = await listPayments(env, "PENDING", 25);
+  if (!pay.length) {
+    await safeReply(ctx, "✅ هیچ پرداخت در انتظار وجود ندارد.");
+    return;
+  }
+  const msg =
+    `<b>📋 پرداخت‌های در انتظار</b>\n\n` +
+    pay.map((p) => `• <code>${escapeHtml(p.txid)}</code> — user <code>${p.userId}</code> — plan <code>${escapeHtml(p.planId)}</code>`).join("\n") +
+    `\n\nبرای تایید: <code>/approve TXID</code>\nبرای رد: <code>/reject TXID</code>`;
+  await safeReply(ctx, msg);
+}
+
+async function adminApprove(ctx: any, env: Env, txid: string) {
+  const u = await ensureUser(env, ctx.from!);
+  if (!isAdmin(env, u.userId) && !isOwner(env, u.userId)) {
+    await safeReply(ctx, "⛔ دسترسی ندارید.");
+    return;
+  }
+  const pay = await getPayment(env, txid);
+  if (!pay || pay.status !== "PENDING") {
+    await safeReply(ctx, "❌ پرداخت پیدا نشد یا در انتظار نیست.");
+    return;
+  }
+  pay.status = "APPROVED";
+  pay.approvedAt = nowIso();
+  await putPayment(env, pay);
+
+  const user = await getUser(env, pay.userId);
+  if (user) {
+    const plan = await findPlan(env, pay.planId);
+    const days = plan?.days ?? 30;
+    const exp = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+    user.subscription = {
+      active: true,
+      planId: pay.planId,
+      startedAt: nowIso(),
+      expiresAt: fmtDateIso(exp),
+    };
+    await putUser(env, user);
+    try {
+      await ctx.api.sendMessage(user.userId, `✅ اشتراک شما فعال شد تا ${user.subscription.expiresAt}`);
+    } catch {}
+  }
+  await safeReply(ctx, "✅ تایید شد.");
+}
+
+async function adminReject(ctx: any, env: Env, txid: string) {
+  const u = await ensureUser(env, ctx.from!);
+  if (!isAdmin(env, u.userId) && !isOwner(env, u.userId)) {
+    await safeReply(ctx, "⛔ دسترسی ندارید.");
+    return;
+  }
+  const pay = await getPayment(env, txid);
+  if (!pay || pay.status !== "PENDING") {
+    await safeReply(ctx, "❌ پرداخت پیدا نشد یا در انتظار نیست.");
+    return;
+  }
+  pay.status = "REJECTED";
+  pay.rejectedAt = nowIso();
+  await putPayment(env, pay);
+
+  try {
+    await ctx.api.sendMessage(pay.userId, `❌ پرداخت شما رد شد. TxID: ${txid}`);
+  } catch {}
+  await safeReply(ctx, "✅ رد شد.");
+}
+
+async function handleGo(ctx: any, env: Env, target: string) {
+  if (target === "menu") return showMenu(ctx, env);
+  if (target === "signals") return startSignalsFlow(ctx, env);
+  if (target === "settings") return showSettings(ctx, env);
+  if (target === "profile") return showProfile(ctx, env);
+  if (target === "buy") return showBuy(ctx, env);
+  if (target === "wallet") return showWallet(ctx, env);
+  if (target === "ref") return showRef(ctx, env);
+  if (target === "support") return showSupport(ctx);
+}
+
+export function createBot(env: Env) {
+  const bot = new Bot<MyContext>(env.BOT_TOKEN);
+
+  bot.use(async (ctx, next) => {
+    (ctx as any).env = env;
+    if (ctx.from) {
+      (ctx as any).user = await ensureUser(env, ctx.from);
     }
-    const exists = await getPayment(env, txid);
-    if (exists) {
-      await safeReply(ctx, "این TxID قبلاً ثبت شده است.");
-      return;
-    }
-const plan = planId ? await findPlan(env, planId) : null;
-const plans = !plan ? await getPlans(env) : null;
-const chosen = plan || (plans && plans[0]) || null;
-
-const p = {
-  txid,
-  userId: u.id,
-  status: "PENDING" as const,
-  createdAt: nowIso(),
-  amountUsdt: chosen ? chosen.priceUsdt : parseFloatSafe(env.SUB_PRICE_USDT, 29),
-  planDays: chosen ? chosen.durationDays : parseIntSafe(env.SUB_DURATION_DAYS, 30),
-};
-    await putPayment(env, p);
-
-    await safeReply(ctx, "✅ TxID ثبت شد. پس از بررسی ادمین، به شما اطلاع داده می‌شود.");
-
-    // notify admins with inline buttons
-    const kb = new InlineKeyboard()
-      .text("✅ Approve", `pay:approve:${txid}`)
-      .text("❌ Reject", `pay:reject:${txid}`);
-    await notifyAdmins(env, bot, `💳 پرداخت جدید (PENDING)
-User: ${u.id}
-TxID: ${txid}`);
-    // also send interactive to owner only? We'll just to admins with callback: easiest is to send message with keyboard to each admin
-    const ids = (env.ADMIN_IDS ?? "").split(",").map(s => s.trim()).filter(Boolean).map(Number);
-    const owner = env.OWNER_ID ? Number(env.OWNER_ID) : undefined;
-    const targets = new Set<number>(ids);
-    if (owner) targets.add(owner);
-    for (const id of targets) {
-      try { await bot.api.sendMessage(id, `برای بررسی: ${txid}`, { reply_markup: kb }); } catch {}
-    }
+    return next();
   });
 
-  bot.command("wallet", async (ctx) => {
-    const wallet = await getPublicWallet(env);
-    await safeReply(ctx, wallet ? `🏦 آدرس ولت عمومی:\n${wallet}` : "❌ هنوز ولت عمومی تنظیم نشده است.");
-  });
-
-  bot.command("level", async (ctx) => {
-    const u = requireUser(ctx);
-    await setState(env, u.id, { flow: "level", step: "q1", data: { answers: [] } });
-    await safeReply(ctx, "🧠 آزمون تعیین سطح شروع شد.\nسوال 1/6: هدف اصلی شما از ترید چیست؟ (کوتاه پاسخ بده)");
-  });
-
-  bot.command("customprompt", async (ctx) => {
-    const u = requireUser(ctx);
-    await setState(env, u.id, { flow: "customprompt", step: "await_text" });
-    await safeReply(ctx, "✍️ لطفاً استراتژی/روش خود را به صورت متن ارسال کنید. سیستم برای شما یک پرامپت اختصاصی می‌سازد و ۲ ساعت بعد ارسال می‌کند.");
-  });
-
-  bot.command("ref", async (ctx) => {
-    const u = requireUser(ctx);
-    const linkBase = `https://t.me/${(bot.botInfo as any)?.username ?? "YOUR_BOT"}?start=`;
-    const codes = u.refCodes.map((c, i) => `${i + 1}) ${linkBase}${c}`).join("\n");
-    await safeReply(ctx, `🎁 رفرال شما:
-${codes}
-
-دعوت موفق: ${u.successfulInvites}
-امتیاز: ${u.points}
-
-برای تبدیل امتیاز: /redeem`, { disable_web_page_preview: true });
-  });
-
-  bot.command("redeem", async (ctx) => {
-    const u = requireUser(ctx);
-    const need = parseIntSafe(env.REDEEM_POINTS, 500);
-    const days = parseIntSafe(env.REDEEM_DAYS, 30);
-    if (u.points < need) {
-      await safeReply(ctx, `امتیاز کافی نیست.
-نیاز: ${need}
-امتیاز شما: ${u.points}`);
-      return;
-    }
-    u.points -= need;
-    // activate subscription for days from now or extend
-    const now = Date.now();
-    const base = u.subscription.expiresAt && Date.parse(u.subscription.expiresAt) > now ? Date.parse(u.subscription.expiresAt) : now;
-    const expires = new Date(base + days * 24 * 3600 * 1000).toISOString();
-    u.subscription.active = true;
-    u.subscription.expiresAt = expires;
-    await putUser(env, u);
-    await safeReply(ctx, `✅ اشتراک رایگان فعال شد.
-انقضا: ${fmtDateIso(expires, env.TZ)}`);
-  });
-
-  bot.command(["support", "education"], async (ctx) => {
-    await safeReply(ctx, 
-      "🆘 پشتیبانی: پیام خود را ارسال کنید تا به ادمین‌ها فوروارد شود.\n📚 آموزش: به‌زودی ...",
-      { reply_markup: mainMenuKb() }
-    );
-  });
-
-  bot.command("payments", async (ctx) => {
-    const u = requireUser(ctx);
-    if (!isAdmin(u, env)) return safeReply(ctx, "دسترسی ندارید.");
-    const pending = await listPayments(env, "PENDING");
-    if (!pending.length) return safeReply(ctx, "پرداخت در انتظار نداریم.");
-    const text = pending.slice(0, 15).map((p) => `• ${p.txid} | user ${p.userId} | ${p.createdAt}`).join("\n");
-    await safeReply(ctx, `لیست پرداخت‌های در انتظار:\n${text}`);
-  });
+  bot.command("start", async (ctx) => showMenu(ctx, env));
+  bot.command("menu", async (ctx) => showMenu(ctx, env));
+  bot.command("signals", async (ctx) => startSignalsFlow(ctx, env));
+  bot.command("settings", async (ctx) => showSettings(ctx, env));
+  bot.command("profile", async (ctx) => showProfile(ctx, env));
+  bot.command("wallet", async (ctx) => showWallet(ctx, env));
+  bot.command("ref", async (ctx) => showRef(ctx, env));
+  bot.command("buy", async (ctx) => showBuy(ctx, env));
+  bot.command("pay", async (ctx) => showBuy(ctx, env));
+  bot.command("support", async (ctx) => showSupport(ctx));
+  bot.command("payments", async (ctx) => adminPayments(ctx, env));
 
   bot.command("approve", async (ctx) => {
-    const u = requireUser(ctx);
-    if (!isAdmin(u, env)) return safeReply(ctx, "دسترسی ندارید.");
-    const parts = (ctx.message?.text ?? "").trim().split(/\s+/).slice(1);
-    const txid = (parts[0] || "").trim();
-    const planId = (parts[1] || "").trim();
-    await approvePayment(bot, env, u.id, txid, true, ctx);
+    const parts = (ctx.message?.text ?? "").split(/\s+/);
+    const txid = parts[1];
+    if (!txid) return safeReply(ctx, "Usage: /approve TXID");
+    await adminApprove(ctx, env, txid);
   });
 
   bot.command("reject", async (ctx) => {
-    const u = requireUser(ctx);
-    if (!isAdmin(u, env)) return safeReply(ctx, "دسترسی ندارید.");
-    const parts = (ctx.message?.text ?? "").trim().split(/\s+/).slice(1);
-    const txid = (parts[0] || "").trim();
-    const planId = (parts[1] || "").trim();
-    await approvePayment(bot, env, u.id, txid, false, ctx);
+    const parts = (ctx.message?.text ?? "").split(/\s+/);
+    const txid = parts[1];
+    if (!txid) return safeReply(ctx, "Usage: /reject TXID");
+    await adminReject(ctx, env, txid);
   });
 
-  bot.command("setwallet", async (ctx) => {
-    const u = requireUser(ctx);
-    if (!isAdmin(u, env)) return safeReply(ctx, "دسترسی ندارید.");
-    const addr = (ctx.message?.text ?? "").split(" ").slice(1).join(" ").trim();
-    if (!addr) return safeReply(ctx, "مثال: /setwallet WALLET_ADDRESS");
-    await setPublicWallet(env, addr);
-    await safeReply(ctx, "✅ ولت عمومی ذخیره شد.");
-    // alert owner
-    const ownerId = env.OWNER_ID ? Number(env.OWNER_ID) : undefined;
-    if (ownerId) {
-      try { await bot.api.sendMessage(ownerId, `⚠️ آدرس ولت عمومی تغییر کرد:
-${addr}`); } catch {}
-    }
+  bot.command("tx", async (ctx) => {
+    const parts = (ctx.message?.text ?? "").split(/\s+/);
+    const txid = parts[1];
+    if (!txid) return safeReply(ctx, "Usage: /tx YOUR_TXID");
+    await handleTx(ctx, env, txid.trim());
   });
 
-  bot.command("setfreelimit", async (ctx) => {
-    const u = requireUser(ctx);
-    if (!isAdmin(u, env)) return safeReply(ctx, "دسترسی ندارید.");
-    const n = Number((ctx.message?.text ?? "").split(" ")[1]);
-    if (!Number.isFinite(n) || n <= 0) return safeReply(ctx, "مثال: /setfreelimit 50");
-    await env.USERS_KV.put("config:free_daily_limit", String(n));
-    await safeReply(ctx, "✅ ثبت شد (برای اعمال کامل، این نسخه نیاز دارد شما مقدار env را نیز sync کنید).");
-  });
-
-  bot.command("setsublimit", async (ctx) => {
-    const u = requireUser(ctx);
-    if (!isAdmin(u, env)) return safeReply(ctx, "دسترسی ندارید.");
-    const n = Number((ctx.message?.text ?? "").split(" ")[1]);
-    if (!Number.isFinite(n) || n <= 0) return safeReply(ctx, "مثال: /setsublimit 50");
-    await env.USERS_KV.put("config:sub_daily_limit", String(n));
-    await safeReply(ctx, "✅ ثبت شد (برای اعمال کامل، این نسخه نیاز دارد شما مقدار env را نیز sync کنید).");
-  });
-
-  bot.command("admin", async (ctx) => {
-    const u = requireUser(ctx);
-    if (!isAdmin(u, env)) return safeReply(ctx, "دسترسی ندارید.");
-    await safeReply(ctx, `🔧 Admin Panel:
-${ctx.me.username ? `https://<YOUR_WORKER_URL>/admin` : "/admin"}
-توکن: ${env.ADMIN_PANEL_TOKEN}`);
-  });
-
-  // Callback queries (menus/actions)
   bot.on("callback_query:data", async (ctx) => {
-    const u = requireUser(ctx);
     const data = ctx.callbackQuery.data;
 
-// Inline plan selection (modern UX)
-if (data.startsWith("plan:")) {
-  const planId = data.slice("plan:".length);
-  await setSelectedPlan(env, ctx.from!.id, planId);
-  await ctx.answerCallbackQuery({ text: "✅ پلن انتخاب شد" });
-
-  const wallet = await getPublicWallet(env);
-  const w = wallet ? `<code>${wallet}</code>` : "هنوز تنظیم نشده";
-
-  const kb = new InlineKeyboard()
-    .text("✅ پرداخت کردم", "paydone").row()
-    .text("🔙 برگشت به پلن‌ها", "planlist");
-
-  await safeEdit(ctx, 
-    `✅ پلن انتخاب شد: <code>${planId}</code>\n\n` +
-      `۱) به آدرس ولت زیر USDT (BEP20) واریز کن:\n${w}\n\n` +
-      `۲) بعد از پرداخت روی «پرداخت کردم» بزن یا TxID را ارسال کن:\n<code>/tx YOUR_TXID</code>`,
-    { parse_mode: "HTML", reply_markup: kb, disable_web_page_preview: true }
-  );
-  return;
-}
-
-if (data === "paydone") {
-  await ctx.answerCallbackQuery({ text: "TxID را ارسال کن" });
-  await safeReply(ctx, 
-    `✅ عالی! حالا TxID پرداخت را ارسال کن:\n<code>/tx YOUR_TXID</code>\n\n` +
-      `اگر TxID را کپی کردی، فقط جایگزین کن و بفرست.`,
-    { parse_mode: "HTML" }
-  );
-  return;
-}
-
-if (data === "planlist") {
-  await ctx.answerCallbackQuery();
-  await showBuy(ctx, env);
-  return;
-}
-
-
-    // Menu
-    if (data === "menu:home") {
+    if (data.startsWith("go:")) {
       await ctx.answerCallbackQuery();
-      await showMenu(ctx);
-      return;
-    }
-    if (data === "menu:signals") {
-      await ctx.answerCallbackQuery();
-      await ctx.api.sendMessage(u.id, "/signals");
-      return;
-    }
-    if (data === "menu:settings") {
-      await ctx.answerCallbackQuery();
-      await safeReply(ctx, settingsText(u), { reply_markup: settingsKb(u) });
-      return;
-    }
-    if (data === "menu:profile") {
-      await ctx.answerCallbackQuery();
-      await ctx.api.sendMessage(u.id, "/profile");
-      return;
-    }
-    if (data === "menu:buy") {
-      await ctx.answerCallbackQuery();
-      await ctx.api.sendMessage(u.id, "/buy");
-      return;
-    }
-    if (data === "menu:ref") {
-      await ctx.answerCallbackQuery();
-      await ctx.api.sendMessage(u.id, "/ref");
-      return;
-    }
-    if (data === "menu:level") {
-      await ctx.answerCallbackQuery();
-      await ctx.api.sendMessage(u.id, "/level");
-      return;
-    }
-    if (data === "menu:support") {
-      await ctx.answerCallbackQuery();
-      await ctx.api.sendMessage(u.id, "/support");
-      return;
-    }
-    if (data === "menu:education") {
-      await ctx.answerCallbackQuery();
-      await ctx.api.sendMessage(u.id, "/education");
-      return;
-    }
-    if (data === "menu:app") {
-      await ctx.answerCallbackQuery();
-      const appUrl = `${ctx.update.callback_query?.message?.chat?.type ? "" : ""}`; // ignored
-      await safeReply(ctx, "📱 برای باز کردن Mini App روی دکمه زیر بزن:", {
-        reply_markup: new InlineKeyboard().webApp("Open Mini App", env.PUBLIC_APP_PATH || "/app").row().text("⬅️ منو", "menu:home"),
-      });
-      return;
+      return handleGo(ctx, env, data.slice(3));
     }
 
-    // Settings
-    if (data.startsWith("set:")) {
+    if (data === "set:tf") {
       await ctx.answerCallbackQuery();
-      const [, key, val] = data.split(":");
-      if (key === "tf") u.settings.timeframe = val as Timeframe;
-      if (key === "risk") u.settings.risk = val as Risk;
-      if (key === "style") {
-        if (val === "CUSTOM" && !u.customPrompt?.ready) {
-          await safeReply(ctx, "❌ پرامپت اختصاصی هنوز آماده نیست. ابتدا /customprompt را انجام دهید.");
-          return;
-        }
-        u.settings.style = val as Style;
-      }
-      if (key === "news") u.settings.news = val as any;
+      return safeEdit(ctx, `<b>⏱ تایم‌فریم را انتخاب کنید:</b>`, { reply_markup: tfKb() });
+    }
+    if (data === "set:risk") {
+      await ctx.answerCallbackQuery();
+      return safeEdit(ctx, `<b>⚖️ سطح ریسک را انتخاب کنید:</b>`, { reply_markup: riskKb() });
+    }
+    if (data === "set:style") {
+      await ctx.answerCallbackQuery();
+      const u = await ensureUser(env, ctx.from!);
+      return safeEdit(ctx, `<b>🎯 سبک معامله را انتخاب کنید:</b>`, { reply_markup: styleKb(u) });
+    }
+    if (data === "set:news") {
+      await ctx.answerCallbackQuery();
+      const u = await ensureUser(env, ctx.from!);
+      u.settings.news = u.settings.news === "ON" ? "OFF" : "ON";
       await putUser(env, u);
-      await safeReply(ctx, `✅ ذخیره شد.\n${settingsText(u)}`, { reply_markup: settingsKb(u) });
-      return;
+      return showSettings(ctx, env);
     }
-
-    // Signals
-    if (data.startsWith("sig:market:")) {
+    if (data === "set:back") {
       await ctx.answerCallbackQuery();
-      const market = data.split(":")[2] as Market;
-      await setState(env, u.id, { flow: "signals", step: "ask_symbol", data: { market } });
-      await safeReply(ctx, `نماد را ارسال کن (مثلاً BTCUSDT یا BTC-USD یا EURUSD=X)
-بازار: ${toMarketLabel(market)}`);
-      return;
+      return showSettings(ctx, env);
     }
 
-    // Payments approval via buttons
-    if (data.startsWith("pay:")) {
+    if (data.startsWith("tf:")) {
       await ctx.answerCallbackQuery();
-      if (!isAdmin(u, env)) return safeReply(ctx, "دسترسی ندارید.");
-      const [, action, txid] = data.split(":");
-      await approvePayment(bot, env, u.id, txid, action === "approve", ctx);
-      return;
-    }
-  });
-
-  // Messages: onboarding, flows
-  bot.on("message", async (ctx) => {
-    const u = requireUser(ctx);
-
-    // Contact handler (onboarding)
-    if (ctx.message?.contact) {
-      const st = await getState(env, u.id);
-      if (st?.flow === "onboarding" && st.step === "ask_contact") {
-        const phone = ctx.message.contact.phone_number;
-        const r = await (await import("./lib/storage")).setUserPhone(env, u.id, phone);
-        if (!r.ok) {
-          await safeReply(ctx, r.reason || "خطا در ذخیره شماره");
-          return;
-        }
-        // next
-        await setState(env, u.id, { flow: "onboarding", step: "ask_experience" });
-        const kb = new InlineKeyboard()
-          .text("مبتدی", "ob:exp:BEGINNER")
-          .text("متوسط", "ob:exp:INTERMEDIATE")
-          .text("حرفه‌ای", "ob:exp:PRO");
-        await safeReply(ctx, "تجربه شما در بازار؟", { reply_markup: kb });
-        return;
-      }
-    }
-
-    const st = await getState(env, u.id);
-
-    // Onboarding steps expecting text
-    if (st?.flow === "onboarding" && st.step === "ask_name") {
-      const name = (ctx.message?.text ?? "").trim();
-      if (name.length < 2) return safeReply(ctx, "نام نامعتبر است. دوباره ارسال کنید.");
-      u.name = name;
+      const tf = data.slice(3) as Timeframe;
+      const u = await ensureUser(env, ctx.from!);
+      u.settings.timeframe = tf;
       await putUser(env, u);
-      await setState(env, u.id, { flow: "onboarding", step: "ask_contact" });
-      const kb = new Keyboard().requestContact("📞 ارسال شماره (Share Contact)").resized().oneTime();
-      await safeReply(ctx, "📞 لطفاً شماره خود را Share کنید:", { reply_markup: kb });
-      return;
+      return showSettings(ctx, env);
+    }
+    if (data.startsWith("risk:")) {
+      await ctx.answerCallbackQuery();
+      const risk = data.slice(5) as Risk;
+      const u = await ensureUser(env, ctx.from!);
+      u.settings.risk = risk;
+      await putUser(env, u);
+      return showSettings(ctx, env);
+    }
+    if (data.startsWith("style:")) {
+      await ctx.answerCallbackQuery();
+      const style = data.slice(6) as Style;
+      const u = await ensureUser(env, ctx.from!);
+      u.settings.style = style;
+      await putUser(env, u);
+      return showSettings(ctx, env);
     }
 
-    // Leveling flow
-    if (st?.flow === "level" && ctx.message?.text) {
-      const ans = ctx.message.text.trim();
-      const qMap: Record<string, string> = {
-        q1: "سوال 1/6: هدف اصلی شما از ترید چیست؟",
-        q2: "سوال 2/6: چقدر زمان در روز برای ترید دارید؟",
-        q3: "سوال 3/6: بیشترین تجربه شما روی کدام بازار است؟",
-        q4: "سوال 4/6: ریسک‌پذیری‌تان را چگونه توصیف می‌کنید؟",
-        q5: "سوال 5/6: کدام سبک را بیشتر می‌پسندید؟ (RTM/ICT/PA/General)",
-        q6: "سوال 6/6: یک اشتباه رایج شما در ترید چیست؟"
+    if (data.startsWith("mkt:")) {
+      await ctx.answerCallbackQuery();
+      const mkt = data.slice(4) as Market;
+      const u = await ensureUser(env, ctx.from!);
+      const st = await getState(env, u.userId);
+      if (!st || st.flow !== "signals") {
+        await setState(env, u.userId, { flow: "signals", step: "pick_market" });
+      }
+      const s2 = (await getState(env, u.userId))!;
+      s2.data = { ...(s2.data ?? {}), market: mkt };
+      s2.step = "ask_symbol";
+      await setState(env, u.userId, s2);
+      return safeEdit(ctx, `<b>✅ بازار انتخاب شد</b>\n\nنماد را ارسال کنید (مثال: BTCUSDT یا XAUUSD):`, { reply_markup: new InlineKeyboard().text("🔙 منو", "go:menu") });
+    }
+
+    if (data === "sig:run") {
+      await ctx.answerCallbackQuery();
+      const u = await ensureUser(env, ctx.from!);
+      const st = await getState(env, u.userId);
+      if (!st || st.flow !== "signals" || !st.data?.market || !st.data?.symbol) {
+        return safeEdit(ctx, "❌ اطلاعات کافی نیست. دوباره /signals را بزنید.", { reply_markup: mainMenuKb() });
+      }
+
+      // quota check/consume
+      const ok = await consume(env, u, 1);
+      if (!ok.ok) {
+        return safeEdit(ctx, `⚡ سهمیه کافی نیست.\nباقی‌مانده روزانه: ${ok.dailyLeft}\nباقی‌مانده ماهانه: ${ok.monthlyLeft}`, { reply_markup: mainMenuKb() });
+      }
+
+      const job: Job = {
+        kind: "signal",
+        jobId: newJobId(),
+        chatId: ctx.chat!.id,
+        userId: u.userId,
+        symbol: st.data.symbol,
+        market: st.data.market,
+        timeframe: u.settings.timeframe,
+        style: u.settings.style,
+        risk: u.settings.risk,
+        news: u.settings.news,
+        createdAt: nowIso(),
       };
-      const idx = Number(st.step.slice(1));
-      st.data = st.data || { answers: [] };
-      st.data.answers.push({ q: qMap[st.step], a: ans });
+      await setState(env, u.userId, null);
 
-      if (idx < 6) {
-        const next = `q${idx + 1}`;
-        await setState(env, u.id, { ...st, step: next, data: st.data });
-        await safeReply(ctx, qMap[next]);
-        return;
-      }
-
-      // analyze result with AI
-      await setState(env, u.id, null);
-      await safeReply(ctx, "در حال تحلیل پاسخ‌ها...");
-
-      const prompt = `تو یک مربی ترید هستی. بر اساس پاسخ‌های کاربر سطح او را تعیین کن.
-خروجی دقیقاً شامل دو بخش باشد:
-1) خلاصه ساختاریافته فارسی
-2) یک JSON معتبر (بدون کدبلاک/بدون کدبلاک ) با این ساختار:
-{ "level": "Beginner|Intermediate|Pro", "summary": "...", "suggestedMarket": "CRYPTO|FOREX|METALS|STOCKS", "suggestedSettings": { "timeframe": "H1", "risk":"MEDIUM", "style":"GENERAL", "news":"OFF" } }
-
-پاسخ‌ها:
-${JSON.stringify(st.data.answers, null, 2)}
-`;
-      try {
-        const out = await callAI(env, prompt, { temperature: 0.2 });
-        const j = extractJsonBlock(out);
-        if (j?.level) {
-          u.levelInfo = { level: String(j.level), summary: String(j.summary ?? ""), suggestedMarket: j.suggestedMarket, suggestedSettings: j.suggestedSettings, updatedAt: nowIso() };
-          await putUser(env, u);
-        }
-        await safeReply(ctx, out);
-      } catch (e: any) {
-        await safeReply(ctx, "❌ خطا در تحلیل سطح. لطفاً دوباره تلاش کنید.");
-      }
-      return;
+      await enqueue(env, job);
+      return safeEdit(ctx, `⏳ درخواست شما ثبت شد و در صف پردازش قرار گرفت.\n\nنماد: ${escapeHtml(job.symbol)}\nTF: ${job.timeframe}\nسبک: ${job.style}`, { reply_markup: mainMenuKb() });
     }
 
-    // Custom prompt flow
-    if (st?.flow === "customprompt" && st.step === "await_text" && ctx.message?.text) {
-      const strategy = ctx.message.text.trim();
-      if (strategy.length < 20) return safeReply(ctx, "متن کوتاه است. لطفاً جزئیات بیشتری بفرستید (حداقل ۲۰ کاراکتر).");
-      await setState(env, u.id, null);
-      await safeReply(ctx, "در حال ساخت پرامپت اختصاصی...");
-
-      const prompt = `تو متخصص مهندسی پرامپت و ترید هستی.
-از روی متن استراتژی زیر، یک پرامپت اختصاصی بساز که:
-- همیشه خروجی را ساختاریافته بدهد (سناریو، سطوح، زون‌ها، ریسک، خلاصه)
-- زبان فارسی
-- بلوک JSON حاوی zones بدهد
-- کاملاً قابل کپی برای استفاده به عنوان style prompt باشد
-
-استراتژی کاربر:
-${strategy}
-`;
-      try {
-        const generated = await callAI(env, prompt, { temperature: 0.3 });
-        // schedule after 2h
-        const due = new Date(Date.now() + 2 * 3600 * 1000).toISOString();
-        await putCustomPromptTask(env, u.id, due, generated);
-        u.customPrompt = { ready: false, text: generated, generatedAt: nowIso() };
-        await putUser(env, u);
-
-        await safeReply(ctx, "✅ پرامپت شما ساخته شد و ۲ ساعت دیگر ارسال می‌شود.");
-      } catch {
-        await safeReply(ctx, "❌ خطا در ساخت پرامپت. دوباره تلاش کنید.");
-      }
-      return;
+    if (data.startsWith("plan:")) {
+      await ctx.answerCallbackQuery();
+      return handlePlanSelected(ctx, env, data.slice(5));
+    }
+    if (data === "paydone") {
+      await ctx.answerCallbackQuery();
+      return handlePayDone(ctx);
+    }
+    if (data === "planlist") {
+      await ctx.answerCallbackQuery();
+      return showBuy(ctx, env);
     }
 
-    // Signals flow: ask symbol
-    if (st?.flow === "signals" && st.step === "ask_symbol" && ctx.message?.text) {
-      const symbol = ctx.message.text.trim();
-      const market = st.data?.market as Market;
-      await setState(env, u.id, null);
-      await safeReply(ctx, "⏳ در حال گرفتن دیتا و ساخت تحلیل...");
-
-      try {
-        const candles = await fetchCandles(env, market, symbol, u.settings.timeframe, 200);
-
-        const base = await getPromptBase(env);
-        const stylePrompt = u.settings.style === "CUSTOM" && u.customPrompt?.ready && u.customPrompt.text
-          ? u.customPrompt.text
-          : await getPromptStyle(env, u.settings.style);
-
-        const candleSummary = summarizeCandles(candles);
-
-        const analysisPrompt = `${base}
-
-[Style]
-${stylePrompt}
-
-[User settings]
-timeframe=${u.settings.timeframe}
-risk=${u.settings.risk}
-news=${u.settings.news}
-
-[Market]
-market=${market}
-symbol=${symbol}
-
-[OHLC summary]
-${candleSummary}
-
-خروجی حتماً با این قالب باشد:
-- وضعیت روند و ساختار (BOS/CHOCH اگر لازم)
-- نواحی مهم (Supply/Demand/OB/FVG/Support/Resistance)
-- سناریو Long / Short (در صورت امکان)
-- پیشنهاد ورود/حدضرر/اهداف (TP1/TP2)
-- مدیریت ریسک (RR پیشنهادی)
-- هشدارها/خبر (اگر news=ON)
-در انتها دقیقاً یک JSON معتبر (بدون کدبلاک/بدون کدبلاک ) تولید کن:
-{
-  "zones":[{"type":"demand","from":0,"to":0,"label":"..."}],
-  "levels":{"entry":0,"sl":0,"tp":[0,0]},
-  "bias":"bullish|bearish|range",
-  "notes":"..."
-}
-`;
-
-        const out = await callAI(env, analysisPrompt, { temperature: 0.15 });
-        const j = extractJsonBlock(out);
-        const zones = normalizeZones(j?.zones);
-        const chartUrl = zones.length ? quickChartUrl(symbol, candles, zones) : null;
-
-        await safeReply(ctx, out, { disable_web_page_preview: true });
-        if (chartUrl) {
-          await ctx.replyWithPhoto(chartUrl, { caption: "📌 چارت با زون‌ها" });
-        } else {
-          await safeReply(ctx, "ℹ️ زون قابل استخراج نبود؛ برای چارت، خروجی JSON را دقیق‌تر تنظیم کنید.");
-        }
-      } catch (e: any) {
-        await safeReply(ctx, `❌ خطا: ${e?.message ?? "unknown"}
-(نماد/بازار را چک کن و دوباره تلاش کن)`);
-      }
-      return;
-    }
-
-    
-    // Vision: اگر کاربر عکس/چارت ارسال کند (بهترین تلاش)
-    if (ctx.message?.photo?.length) {
-      const r = await consume(env, u, 1);
-      if (!r.ok) {
-        await safeReply(ctx, `${r.reason}\nبرای مشاهده سهمیه: /profile`);
-        return;
-      }
-
-      // choose a medium size to reduce payload
-      const photos = ctx.message.photo;
-      const pick = photos[Math.max(0, photos.length - 2)];
-      try {
-        const file = await ctx.getFile();
-        // ctx.getFile() returns best size; we instead use pick.file_id
-        const f = await bot.api.getFile(pick.file_id);
-        if (!f.file_path) throw new Error("no file_path");
-        const url = `https://api.telegram.org/file/bot${env.BOT_TOKEN}/${f.file_path}`;
-        const imgRes = await fetch(url);
-        const buf = await imgRes.arrayBuffer();
-        // limit to 2.5MB
-        if (buf.byteLength > 2_500_000) {
-          await safeReply(ctx, "⚠️ تصویر خیلی بزرگ است. لطفاً اسکرین‌شات کوچک‌تر ارسال کنید.");
-          return;
-        }
-        const b64 = arrayBufferToBase64(buf);
-        const mime = f.file_path.endsWith(".png") ? "image/png" : "image/jpeg";
-        const dataUrl = `data:${mime};base64,${b64}`;
-
-        const base = await getPromptBase(env);
-        const vision = await (await import("./lib/storage")).getPromptVision(env);
-        const stylePrompt = u.settings.style === "CUSTOM" && u.customPrompt?.ready && u.customPrompt.text
-          ? u.customPrompt.text
-          : await getPromptStyle(env, u.settings.style);
-
-        const p = `${base}
-
-[Vision]
-${vision}
-
-[Style]
-${stylePrompt}
-
-[User settings]
-timeframe=${u.settings.timeframe}
-risk=${u.settings.risk}
-news=${u.settings.news}
-
-کاربر یک تصویر چارت ارسال کرده است. لطفاً تحلیل را بر اساس تصویر ارائه کن و در انتها بلوک JSON با zones بده.`;
-
-        const out = await callAIWithImage(env, p, dataUrl, { temperature: 0.2 });
-        await safeReply(ctx, out, { disable_web_page_preview: true });
-      } catch (e: any) {
-        await safeReply(ctx, "❌ خطا در تحلیل تصویری. (اگر از OpenAI استفاده می‌کنید، مدل باید vision را پشتیبانی کند)");
-      }
-      return;
-    }
-
-// Support: forward to admins
-    if (ctx.message?.text?.startsWith("/")) return; // ignore other commands
-    if (ctx.message?.text) {
-      // If user sends text and no flow, treat as support
-      const txt = ctx.message.text.trim();
-      if (txt.length >= 3) {
-        await notifyAdmins(env, bot, `🆘 پیام کاربر
-User: ${u.id}
-@${u.username ?? "-"}
-
-${txt}`);
-        await safeReply(ctx, "پیام شما برای پشتیبانی ارسال شد ✅");
-      }
-    }
+    await ctx.answerCallbackQuery();
   });
 
-  // onboarding callback queries
-  bot.on("callback_query:data", async (ctx, next) => {
-    const u = requireUser(ctx);
-    const data = ctx.callbackQuery.data;
+  bot.on("message:text", async (ctx) => {
+    const txt = ctx.message.text;
 
-    if (data.startsWith("ob:exp:")) {
-      await ctx.answerCallbackQuery();
-      const exp = data.split(":")[2];
-      u.experience = exp as any;
-      await putUser(env, u);
-      await setState(env, u.id, { flow: "onboarding", step: "ask_fav_market" });
-      const kb = new InlineKeyboard()
-        .text("CRYPTO", "ob:market:CRYPTO").text("FOREX", "ob:market:FOREX").row()
-        .text("METALS", "ob:market:METALS").text("STOCKS", "ob:market:STOCKS");
-      await safeReply(ctx, "بازار مورد علاقه‌ات کدام است؟", { reply_markup: kb });
-      return;
-    }
+    // flow handlers
+    await handleSignalsText(ctx, env, txt);
 
-    if (data.startsWith("ob:market:")) {
-      await ctx.answerCallbackQuery();
-      const market = data.split(":")[2] as Market;
-      u.favoriteMarket = market;
-      await putUser(env, u);
-      await setState(env, u.id, null);
+    // fallback: help
+    if (txt.startsWith("/")) return;
+  });
 
-      // Referral acceptance rule: only count referral when contact is shared AND phone is new (already enforced).
-      if (u.referrerId) {
-        const refUser = await getUser(env, u.referrerId);
-        if (refUser) {
-          refUser.successfulInvites += 1;
-          // commission tier
-          const step = parseIntSafe(env.REF_COMMISSION_STEP_PCT, 4);
-          const max = parseIntSafe(env.REF_COMMISSION_MAX_PCT, 20);
-          refUser.referralCommissionPct = Math.min(max, refUser.successfulInvites * step);
-
-          // points for referral
-          const pts = parseIntSafe(env.POINTS_PER_REF, 6);
-          refUser.points += pts;
-
-          await putUser(env, refUser);
-        }
-      }
-
-      await safeReply(ctx, "✅ آنبوردینگ تکمیل شد!");
-      await showMenu(ctx);
-      return;
-    }
-
-    await next();
+  bot.on("message:contact", async (ctx) => {
+    // onboarding path could be here (kept minimal)
+    const u = await ensureUser(env, ctx.from!);
+    const phone = ctx.message.contact?.phone_number;
+    if (!phone) return;
+    u.profile = u.profile ?? {};
+    u.profile.phone = phone;
+    await putUser(env, u);
+    await safeReply(ctx, "✅ شماره شما ثبت شد.", { reply_markup: mainMenuKb() });
   });
 
   return bot;
-}
-
-function summarizeCandles(candles: Array<{ t: number; o: number; h: number; l: number; c: number }>) {
-  const last = candles.slice(-60);
-  const closes = last.map(c => c.c);
-  const hi = Math.max(...last.map(c => c.h));
-  const lo = Math.min(...last.map(c => c.l));
-  const first = last[0]?.c ?? 0;
-  const lastc = last[last.length - 1]?.c ?? 0;
-  const chg = first ? ((lastc - first) / first) * 100 : 0;
-  return `last_close=${lastc}
-range_high=${hi}
-range_low=${lo}
-change_pct_last_60_bars=${chg.toFixed(2)}
-samples=[${candles.slice(-10).map(c => ({ t: c.t, o: c.o, h: c.h, l: c.l, c: c.c })).map(x => JSON.stringify(x)).join(", ")}]`;
-}
-
-function normalizeZones(zones: any): Zone[] {
-  if (!Array.isArray(zones)) return [];
-  const out: Zone[] = [];
-  for (const z of zones) {
-    const from = Number(z?.from);
-    const to = Number(z?.to);
-    if (!Number.isFinite(from) || !Number.isFinite(to)) continue;
-    const typeRaw = String(z?.type ?? "other").toLowerCase();
-    const type = (["demand","supply","support","resistance","fvg","ob"].includes(typeRaw) ? typeRaw : "other") as Zone["type"];
-    out.push({ type, from, to, label: z?.label ? String(z.label).slice(0, 18) : undefined });
-  }
-  return out;
-}
-
-async function approvePayment(bot: Bot<MyContext>, env: Env, reviewerId: number, txid: string, approve: boolean, ctx?: MyContext) {
-  if (!txid) { if (ctx) await safeReply(ctx, "TxID را وارد کنید."); return; }
-  const p = await getPayment(env, txid);
-  if (!p) { if (ctx) await safeReply(ctx, "یافت نشد."); return; }
-  if (p.status !== "PENDING") { if (ctx) await safeReply(ctx, "این پرداخت قبلاً بررسی شده است."); return; }
-
-  p.status = approve ? "APPROVED" : "REJECTED";
-  p.reviewedAt = nowIso();
-  p.reviewerId = reviewerId;
-  await putPayment(env, p);
-
-  if (approve) {
-    const user = await getUser(env, p.userId);
-    if (user) {
-      // activate subscription
-      const now = Date.now();
-      const days = p.planDays ?? parseIntSafe(env.SUB_DURATION_DAYS, 30);
-      const base = user.subscription.expiresAt && Date.parse(user.subscription.expiresAt) > now ? Date.parse(user.subscription.expiresAt) : now;
-      const expires = new Date(base + days * 24 * 3600 * 1000).toISOString();
-      user.subscription.active = true;
-      user.subscription.expiresAt = expires;
-      user.subscription.lastTxId = txid;
-
-      // points for purchase
-      user.points += parseIntSafe(env.POINTS_PER_SUB_PURCHASE, 1000);
-
-      await putUser(env, user);
-      try { await bot.api.sendMessage(user.id, `✅ پرداخت تایید شد.
-اشتراک فعال شد تا: ${fmtDateIso(expires, env.TZ)}`); } catch {}
-
-      // referral commission/points for referrer on purchase
-      if (user.referrerId) {
-        const ref = await getUser(env, user.referrerId);
-        if (ref) {
-          // commission can be computed externally; we just notify + add points.
-          const bonus = parseIntSafe(env.POINTS_PER_SUB_PURCHASE, 1000);
-          ref.points += bonus;
-          await putUser(env, ref);
-          try { await bot.api.sendMessage(ref.id, `🎉 یکی از دعوت‌شده‌های شما اشتراک خرید.
-+${bonus} امتیاز`); } catch {}
-        }
-      }
-    }
-    if (ctx) await safeReply(ctx, "✅ تایید شد.");
-  } else {
-    try { await bot.api.sendMessage(p.userId, "❌ پرداخت شما رد شد. اگر اشتباه است با پشتیبانی تماس بگیرید."); } catch {}
-    if (ctx) await safeReply(ctx, "❌ رد شد.");
-  }
 }
