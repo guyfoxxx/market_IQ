@@ -34,7 +34,7 @@ export async function ensureUser(env: Env, partial: {
   const defaultSettings: Settings = {
     timeframe: (env.DEFAULT_TIMEFRAME as Timeframe) ?? "H1",
     risk: (env.DEFAULT_RISK as Risk) ?? "MEDIUM",
-    style: (env.DEFAULT_STYLE as Style) ?? "GENERAL",
+    style: (env.DEFAULT_STYLE as Style) ?? "PA",
     news: (env.DEFAULT_NEWS as any) ?? "OFF",
   };
 
@@ -172,24 +172,25 @@ export async function setPromptVision(env: Env, text: string) {
   await env.USERS_KV.put(PROMPT_VISION, text);
 }
 export async function getPromptStyle(env: Env, style: string): Promise<string> {
-  return (await env.USERS_KV.get(PROMPT_STYLE(style))) ?? DEFAULT_STYLE_PROMPTS[style] ?? DEFAULT_STYLE_PROMPTS["GENERAL"];
+  return (await env.USERS_KV.get(PROMPT_STYLE(style))) ?? DEFAULT_STYLE_PROMPTS[style] ?? DEFAULT_STYLE_PROMPTS["PA"];
 }
 export async function setPromptStyle(env: Env, style: string, text: string) {
   await env.USERS_KV.put(PROMPT_STYLE(style), text);
 }
 
 export const DEFAULT_BASE_PROMPT = `شما یک تحلیل‌گر حرفه‌ای بازار مالی هستید.
-خروجی باید «ساختاریافته» و «قابل اجرا» باشد.
-همیشه به مدیریت ریسک و سناریوهای جایگزین اشاره کن.
-در انتها یک بلوک JSON تولید کن که شامل zones و سطوح کلیدی باشد.`;
+خروجی برای کاربر باید «متن معمولی، واضح و اجرایی» و به زبان فارسی باشد (بدون کدنویسی و بدون اشاره به ابزارها).
+از اندیکاتورها استفاده نکن مگر وقتی صراحتاً درخواست شده باشد.
+همیشه مدیریت ریسک، سناریوی جایگزین و نقطه ابطال (Invalidation) را ذکر کن.
+در انتهای پاسخ، فقط برای رسم چارت، دقیقاً یک بلوک \`\`\`json قرار بده که zones و levels را داشته باشد.`;
 
 export const DEFAULT_VISION_PROMPT = `اگر کاربر تصویر/چارت فرستاد:
 - ساختار بازار، روند، نواحی عرضه/تقاضا، نقدینگی و نقاط ورود/خروج را شناسایی کن.
 - خروجی با همان قالب تحلیلی + بلوک JSON باشد.`;
 
 export const DEFAULT_STYLE_PROMPTS: Record<string, string> = {
-  "RTM": "سبک RTM: تمرکز روی بیس/انگالف/ترپ، نواحی عرضه/تقاضا، ورود از ریفاین.",
-  "ICT": "سبک ICT: تمرکز روی Liquidity, Order Block, FVG, BOS/CHOCH, Premium/Discount.",
-  "PA": "پرایس اکشن: ساختار بازار، حمایت/مقاومت، کندل‌خوانی و الگوها.",
-  "GENERAL": "تحلیل عمومی: روند، سطوح مهم، سناریوها، ریسک/ریوارد."
+  "PA": "You are a professional Price Action trader and market analyst.\n\nAnalyze the given market (Symbol, Timeframe) using pure Price Action concepts only.\nDo NOT use indicators unless explicitly requested.\n\nYour analysis must include:\n\n1. Market Structure\n- Identify the current structure (Uptrend / Downtrend / Range)\n- Mark HH, HL, LH, LL\n- Specify whether structure is intact or broken (BOS / MSS)\n\n2. Key Levels\n- Strong Support & Resistance zones\n- Flip zones (SR \u2192 Resistance / Resistance \u2192 Support)\n- Psychological levels (if relevant)\n\n3. Candlestick Behavior\n- Identify strong rejection candles (Pin bar, Engulfing, Inside bar)\n- Explain what these candles indicate about buyers/sellers\n\n4. Entry Scenarios\nFor each valid setup:\n- Entry zone\n- Stop Loss (logical, structure-based)\n- Take Profit targets (TP1 / TP2)\n- Risk to Reward (minimum 1:2)\n\n5. Bias & Scenarios\n- Main bias (Bullish / Bearish / Neutral)\n- Alternative scenario if price invalidates the setup\n\n6. Execution Plan\n- Is this a continuation or reversal trade?\n- What confirmation is required before entry?\n\nExplain everything step-by-step, clearly and professionally.\nAvoid overtrading. Focus on high-probability setups only.\n",
+  "ICT": "You are an ICT (Inner Circle Trader) & Smart Money analyst.\n\nAnalyze the market (Symbol, Timeframe) using ICT & Smart Money Concepts ONLY.\n\nYour analysis must include:\n\n1. Higher Timeframe Bias\n- Determine HTF bias (Daily / H4)\n- Identify Premium & Discount zones\n- Is price in equilibrium or imbalance?\n\n2. Liquidity Mapping\n- Identify:\n  - Equal Highs / Equal Lows\n  - Buy-side liquidity\n  - Sell-side liquidity\n- Mark likely stop-loss pools\n\n3. Market Structure\n- Identify:\n  - BOS (Break of Structure)\n  - MSS (Market Structure Shift)\n- Clarify whether the move is manipulation or expansion\n\n4. PD Arrays\n- Order Blocks (Bullish / Bearish)\n- Fair Value Gaps (FVG)\n- Liquidity Voids\n- Previous High / Low (PDH, PDL, PWH, PWL)\n\n5. Kill Zones (if intraday)\n- London Kill Zone\n- New York Kill Zone\n- Explain timing relevance\n\n6. Entry Model\n- Entry model used (e.g. Liquidity Sweep \u2192 MSS \u2192 FVG entry)\n- Entry price\n- Stop Loss (below/above OB or swing)\n- Take Profits (liquidity targets)\n\n7. Narrative\n- Explain the story:\n  - Who is trapped?\n  - Where did smart money enter?\n  - Where is price likely engineered to go?\n\nProvide a clear bullish/bearish execution plan and an invalidation point.\n",
+  "ATR": "You are a quantitative trading assistant specializing in volatility-based strategies.\n\nAnalyze the market (Symbol, Timeframe) using ATR (Average True Range) as the core tool.\n\nYour analysis must include:\n\n1. Volatility State\n- Current ATR value\n- Compare current ATR with historical average\n- Is volatility expanding or contracting?\n\n2. Market Condition\n- Trending or Ranging?\n- Is the market suitable for breakout or mean reversion?\n\n3. Trade Setup\n- Optimal Entry based on price structure\n- ATR-based Stop Loss:\n  - SL = Entry \u00b1 (ATR \u00d7 Multiplier)\n- ATR-based Take Profit:\n  - TP1, TP2 based on ATR expansion\n\n4. Position Sizing\n- Risk per trade (%)\n- Position size calculation based on SL distance\n\n5. Trade Filtering\n- When NOT to trade based on ATR\n- High-risk volatility conditions (news, spikes)\n\n6. Risk Management\n- Max daily loss\n- Max consecutive losses\n- Trailing Stop logic using ATR\n\n7. Summary\n- Is this trade statistically justified?\n- Expected trade duration\n- Risk classification (Low / Medium / High)\n\nKeep the explanation practical and execution-focused.\n",
+  "CUSTOM": "Custom prompt (set after generation)"
 };
