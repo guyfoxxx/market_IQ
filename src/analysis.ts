@@ -70,6 +70,8 @@ function perStylerompt(style: Style) {
       return `تمرکز روی RTM: زون‌های عرضه/تقاضا، QM، FTR، پایه رنج‌ها، اعتبار زون‌ها.`;
     case 'ict':
       return `تمرکز روی ICT: Liquidity, PD Arrays, FVG, Order Block, MSS/BOS, Premium/Discount.`;
+    case 'deep':
+      return `سبک Deep: تحلیل چندلایه ساختار بازار، اعتبارسنجی کانتکست، همگرایی تایم‌فریم‌ها و سناریوی دقیق ورود/خروج.`;
     case 'price_action':
       return `تمرکز روی پرایس‌اکشن کلاسیک: حمایت/مقاومت، روند، شکست‌ها، کندل‌پترن‌ها.`;
     case 'general_prompt':
@@ -246,4 +248,3 @@ function findLastJsonCandidate(text: string): string | null {
   if (trimmed.startsWith('{') && trimmed.endsWith('}')) return trimmed;
   return null;
 }
-

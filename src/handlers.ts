@@ -1,11 +1,10 @@
 import type { Env, Storage } from './storage';
 import type { Market, SessionState, Style, UserProfile } from './types';
 import { checkAndConsume } from './quota';
-import { formatDateTime, isAdmin, isOwner, nowMs, parseCommand } from './utils';
+import { formatDateTime, isAdmin, isOwner, nowMs, parseCommand, parseIdList } from './utils';
 import { fetchCandles } from './data';
 import { renderChartPng } from './chart';
 import { runAnalysis } from './analysis';
-import { getNewsDigest } from './news';
 import { generateText } from './ai';
 
 
@@ -181,6 +180,7 @@ function styleKeyboard(user: UserProfile) {
   const allowCustom = !!user.customPromptReady;
   const rows: any[] = [
     [{ text: 'ICT', callback_data: 'on:style:ict' }, { text: 'RTM', callback_data: 'on:style:rtm' }],
+    [{ text: 'Deep', callback_data: 'on:style:deep' }],
     [{ text: 'پرایس اکشن', callback_data: 'on:style:price_action' }],
     [{ text: 'پرامپت عمومی', callback_data: 'on:style:general_prompt' }],
     [{ text: allowCustom ? 'پرامپت اختصاصی ✅' : 'پرامپت اختصاصی 🔒', callback_data: allowCustom ? 'on:style:custom_prompt' : 'noop' }],
@@ -288,17 +288,19 @@ async function onCommand(ctx: { tg: any; storage: Storage; env: Env; user: UserP
   try { await tg.sendChatAction(chatId, 'typing'); } catch {}
 
 
-  if (cmd === '/start') {
-  const botName = getBotName(env);
-  await tg.sendMessage(
-    chatId,
-    `👋 سلام ${shortHtml((user.first_name || user.username || ''))}\nبه ربات <b>${shortHtml(botName)}</b> خوش آمدی.\nاز منوی زیر انتخاب کن:`,
-    { reply_markup: mainMenu(env.PUBLIC_BASE_URL) }
-  );
-  return;
-}
-
-    await tg.sendMessage(chatId, `خوش اومدی ${shortHtml(user.name)} 👋\n\nمنوی اصلی:`, { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
+  if (cmd === '/start' || cmd === '/menu') {
+    if (!user.name) {
+      await storage.setSession(user.id, { mode: 'onboarding_name' });
+      await tg.sendMessage(chatId, `${WELCOME}\n\nلطفاً نامت را وارد کن:`, { reply_markup: removeKeyboard() });
+      return;
+    }
+    if (!user.phone) {
+      await storage.setSession(user.id, { mode: 'onboarding_contact' });
+      await tg.sendMessage(chatId, 'برای ادامه شماره‌ات را Share Contact کن:', { reply_markup: contactKeyboard() });
+      return;
+    }
+    const displayName = user.name || user.firstName || user.username || '';
+    await tg.sendMessage(chatId, `خوش اومدی ${shortHtml(displayName)} 👋\n\nمنوی اصلی:`, { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
     return;
   }
 
@@ -319,21 +321,21 @@ async function onCommand(ctx: { tg: any; storage: Storage; env: Env; user: UserP
   }
 
   if (cmd === '/buy' || cmd === '/pay') {
-  const stored = await storage.getPublicWallet();
-  const addr = getPublicWallet(env, stored);
-  const pay = getPaymentLabel(env);
-  const price = await storage.getSubPrice();
-  const days = await storage.getSubDays();
+    const stored = await storage.getPublicWallet();
+    const addr = getPublicWallet(env, stored);
+    const pay = getPaymentLabel(env);
+    const price = await storage.getSubPrice();
+    const days = await storage.getSubDays();
 
-  let msg = `💳 راهنمای خرید اشتراک\n\n`;
-  msg += `• مبلغ: <b>${shortHtml(String(price))}</b> ${shortHtml(pay)}\n`;
-  msg += `• مدت: <b>${shortHtml(String(days))}</b> روز\n\n`;
-  if (addr) msg += `• آدرس ولت: <code>${shortHtml(addr)}</code>\n\n`;
-  msg += `بعد از پرداخت، TxID را ارسال کن:\n<code>/tx YOUR_TXID</code>`;
+    let msg = `💳 راهنمای خرید اشتراک\n\n`;
+    msg += `• مبلغ: <b>${shortHtml(String(price))}</b> ${shortHtml(pay)}\n`;
+    msg += `• مدت: <b>${shortHtml(String(days))}</b> روز\n\n`;
+    if (addr) msg += `• آدرس ولت: <code>${shortHtml(addr)}</code>\n\n`;
+    msg += `بعد از پرداخت، TxID را ارسال کن:\n<code>/tx YOUR_TXID</code>`;
 
-  await tg.sendMessage(chatId, msg, { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
-  return;
-}
+    await tg.sendMessage(chatId, msg, { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
+    return;
+  }
 
   if (cmd === '/tx') {
     const txid = (args[0] || '').trim();
@@ -349,31 +351,20 @@ async function onCommand(ctx: { tg: any; storage: Storage; env: Env; user: UserP
   }
 
   if (cmd === '/wallet') {
-  const stored = await storage.getPublicWallet();
-  const addr = getPublicWallet(env, stored);
-  if (!addr) {
-    await tg.sendMessage(chatId, `ولت عمومی هنوز تنظیم نشده است.`, { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
+    const stored = await storage.getPublicWallet();
+    const addr = getPublicWallet(env, stored);
+    if (!addr) {
+      await tg.sendMessage(chatId, `ولت عمومی هنوز تنظیم نشده است.`, { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
+      return;
+    }
+    await tg.sendMessage(
+      chatId,
+      `آدرس ولت عمومی (برای دریافت <b>${shortHtml(getPaymentLabel(env))}</b>):\n<code>${shortHtml(addr)}</code>`,
+      { reply_markup: mainMenu(env.PUBLIC_BASE_URL) }
+    );
     return;
   }
-  await tg.sendMessage(
-    chatId,
-    `آدرس ولت عمومی (برای دریافت <b>${shortHtml(getPaymentLabel(env))}</b>):\n<code>${shortHtml(addr)}</code>`,
-    { reply_markup: mainMenu(env.PUBLIC_BASE_URL) }
-  );
-  return;
-}
 
-  if (!market) {
-    market = guessMarketFromSymbol(symbol);
-  }
-
-  const nd = await getNewsDigest({ storage, env, market, symbol, maxItems: 8, cacheTtlSec: 600, summarize: true });
-  await tg.sendMessage(chatId, nd.text);
-  return;
-
-
-
-  
 
   if (cmd === '/customprompt') {
     await storage.setSession(user.id, { mode: 'customprompt_wait_text' });
@@ -872,30 +863,31 @@ async function adminCommands(ctx: { tg: any; storage: Storage; env: Env; user: U
   }
 
   if (cmd === '/setwallet') {
-  if (!isAdmin(env, user.id)) {
-    await tg.sendMessage(chatId, '⛔️ دسترسی ندارید.', { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
-    return;
-  }
-  const addr = (args[0] || '').trim();
-  if (!addr) {
-    await tg.sendMessage(chatId, 'فرمت: /setwallet WALLET_ADDRESS', { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
-    return;
-  }
-  await storage.setPublicWallet(addr);
-  await tg.sendMessage(
-    chatId,
-    `✅ ولت عمومی تنظیم شد:\n<code>${shortHtml(addr)}</code>\nشبکه: <b>${shortHtml(getPaymentLabel(env))}</b>`,
-    { reply_markup: mainMenu(env.PUBLIC_BASE_URL) }
-  );
+    if (!isAdmin(env, user.id)) {
+      await tg.sendMessage(chatId, '⛔️ دسترسی ندارید.', { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
+      return;
+    }
+    const addr = (args[0] || '').trim();
+    if (!addr) {
+      await tg.sendMessage(chatId, 'فرمت: /setwallet WALLET_ADDRESS', { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
+      return;
+    }
+    await storage.setPublicWallet(addr);
+    await tg.sendMessage(
+      chatId,
+      `✅ ولت عمومی تنظیم شد:\n<code>${shortHtml(addr)}</code>\nشبکه: <b>${shortHtml(getPaymentLabel(env))}</b>`,
+      { reply_markup: mainMenu(env.PUBLIC_BASE_URL) }
+    );
 
-  const owners = (await storage.getOwnersFromEnv(env)).filter((id: number) => id !== user.id);
-  for (const oid of owners) {
-    try {
-      await tg.sendMessage(oid, `⚠️ هشدار تغییر ولت عمومی\nولت جدید: <code>${shortHtml(addr)}</code>\nتوسط: ${shortHtml(user.first_name || user.username || String(user.id))}`);
-    } catch {}
+    const owners = parseIdList(env?.OWNER_IDS).filter((id) => id !== user.id);
+    const changedBy = shortHtml(user.firstName || user.username || String(user.id));
+    for (const oid of owners) {
+      try {
+        await tg.sendMessage(oid, `⚠️ هشدار تغییر ولت عمومی\nولت جدید: <code>${shortHtml(addr)}</code>\nتوسط: ${changedBy}`);
+      } catch {}
+    }
+    return;
   }
-  return;
-}
 
   if (cmd === '/setfreelimit') {
     const n = Number(args[0]);
@@ -921,7 +913,7 @@ async function notifyAdmins(storage: Storage, tg: any, text: string) {
   const ids = admins.split(',').map((s: string) => s.trim()).filter(Boolean).map((s: string) => Number(s));
   const owner = (storage as any).env?.OWNER_ID ? Number((storage as any).env.OWNER_ID) : null;
   const targets = new Set<number>([...(owner ? [owner] : []), ...ids]);
-  for (const id of targets) {
+  for (const id of Array.from(targets)) {
     try { await tg.sendMessage(id, text); } catch {}
   }
 }

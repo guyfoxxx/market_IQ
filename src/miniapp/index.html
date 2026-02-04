@@ -5,33 +5,286 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Market IQ</title>
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; background:#0b1220; color:#e9eef9; }
-    header { padding: 14px 16px; background:#111a2e; border-bottom:1px solid #223055; position: sticky; top: 0; }
-    header h1 { margin:0; font-size: 16px; }
-    main { padding: 16px; max-width: 860px; margin: 0 auto; }
-    .tabs { display:flex; gap:10px; margin-bottom: 12px; flex-wrap: wrap; }
-    .tab { padding: 8px 10px; border-radius: 999px; border:1px solid #223055; background:#111a2e; cursor:pointer; }
-    .tab.active { background:#3b82f6; border-color:#3b82f6; }
-    .card { background:#111a2e; border:1px solid #223055; border-radius:14px; padding: 14px; margin-bottom: 12px; }
-    input, select, textarea { width:100%; padding: 10px 12px; border-radius:10px; border:1px solid #2a3b68; background:#0b1220; color:#e9eef9; }
-    button { padding: 10px 12px; border: 0; border-radius: 10px; background:#3b82f6; color:white; cursor:pointer; }
-    .row { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    pre { white-space: pre-wrap; background:#0b1220; border:1px solid #223055; padding:10px; border-radius:10px; }
-    a { color: #93c5fd; }
-    .banner { border: 1px dashed #3b82f6; background: rgba(59,130,246,0.12); padding: 12px; border-radius: 14px; margin-bottom: 12px; display:none;}
-  
-    button { transition: transform .06s ease, filter .2s ease; }
-    button:active { transform: scale(0.98); }
+    :root {
+      color-scheme: dark;
+      --bg: #0a0f1d;
+      --bg-soft: #0f1526;
+      --card: #121a2d;
+      --card-border: rgba(99, 124, 188, 0.2);
+      --card-glow: rgba(30, 64, 175, 0.18);
+      --text: #e7ecf6;
+      --muted: rgba(231, 236, 246, 0.65);
+      --accent: #5b8cff;
+      --accent-2: #22d3ee;
+      --success: #22c55e;
+      --danger: #f97316;
+      --radius: 16px;
+      --shadow: 0 20px 40px rgba(2, 6, 23, 0.55);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: "IRANSansX", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      margin: 0;
+      background: radial-gradient(circle at top, rgba(91, 140, 255, 0.2), transparent 55%), var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      padding: 16px 20px;
+      background: rgba(10, 15, 29, 0.88);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid rgba(99, 124, 188, 0.25);
+    }
+
+    header .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    header .logo {
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      box-shadow: 0 12px 30px rgba(59, 130, 246, 0.35);
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    header p {
+      margin: 2px 0 0;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      background: rgba(17, 24, 39, 0.6);
+      padding: 6px;
+      border-radius: 999px;
+      border: 1px solid rgba(99, 124, 188, 0.25);
+      backdrop-filter: blur(10px);
+    }
+
+    .tab {
+      padding: 8px 14px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .tab.active {
+      background: linear-gradient(135deg, rgba(91, 140, 255, 0.25), rgba(34, 211, 238, 0.2));
+      color: var(--text);
+      border-color: rgba(91, 140, 255, 0.6);
+      box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.15);
+    }
+
+    .card {
+      background: linear-gradient(145deg, rgba(18, 26, 45, 0.95), rgba(12, 18, 32, 0.95));
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 18px;
+      box-shadow: var(--shadow);
+    }
+
+    .stack {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .hero {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: -50px -50px auto auto;
+      width: 160px;
+      height: 160px;
+      background: radial-gradient(circle, rgba(34, 211, 238, 0.25), transparent 70%);
+      pointer-events: none;
+    }
+
+    .hero h2 {
+      margin: 0;
+      font-size: 20px;
+    }
+
+    .hero .meta {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(91, 140, 255, 0.15);
+      border: 1px solid rgba(91, 140, 255, 0.35);
+      font-size: 11px;
+      color: var(--accent);
+    }
+
+    .grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .grid.two {
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+
+    .metric {
+      padding: 14px;
+      border-radius: 14px;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(99, 124, 188, 0.2);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .metric .label {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .metric .value {
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .progress {
+      height: 10px;
+      background: rgba(15, 23, 42, 0.75);
+      border-radius: 999px;
+      overflow: hidden;
+      border: 1px solid rgba(99, 124, 188, 0.25);
+    }
+
+    .progress span {
+      display: block;
+      height: 100%;
+      width: 0;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      transition: width 0.3s ease;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(99, 124, 188, 0.3);
+      background: rgba(10, 15, 29, 0.8);
+      color: var(--text);
+    }
+
+    button {
+      padding: 10px 14px;
+      border: 0;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.1s ease, filter 0.2s ease;
+    }
+
     button:hover { filter: brightness(1.05); }
-    .tab { transition: transform .06s ease, filter .2s ease; }
-    .tab:active { transform: scale(0.98); }
-    .card { box-shadow: 0 10px 30px rgba(0,0,0,.25); }
-    .muted { color: rgba(233,238,249,.72); font-size: 12px; }
-</style>
+    button:active { transform: scale(0.98); }
+
+    .row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+    }
+
+    pre {
+      white-space: pre-wrap;
+      background: rgba(10, 15, 29, 0.7);
+      border: 1px solid rgba(99, 124, 188, 0.25);
+      padding: 12px;
+      border-radius: 12px;
+      color: var(--muted);
+      min-height: 80px;
+    }
+
+    a { color: #9ec5ff; }
+
+    .banner {
+      border: 1px dashed rgba(91, 140, 255, 0.6);
+      background: rgba(91, 140, 255, 0.12);
+      padding: 12px;
+      border-radius: var(--radius);
+      margin-bottom: 12px;
+      display: none;
+    }
+
+    .chip-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chip {
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(14, 23, 45, 0.8);
+      border: 1px solid rgba(99, 124, 188, 0.25);
+      font-size: 12px;
+    }
+
+    .muted { color: var(--muted); font-size: 12px; }
+  </style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
-<header><h1>Mini App</h1></header>
+<header>
+  <div class="brand">
+    <div class="logo">IQ</div>
+    <div>
+      <h1>Market IQ</h1>
+      <p>داشبورد هوشمند تحلیل، اشتراک و تنظیمات</p>
+    </div>
+  </div>
+</header>
 <main>
   <div id="banner" class="banner">
     <div id="bannerText"></div>
@@ -45,7 +298,51 @@
     <div class="tab" data-tab="wallet" onclick="switchTab('wallet')">کیف پول</div>
   </div>
 
-  <section id="dash" class="card"></section>
+  <section id="dash" class="stack">
+    <div class="card hero">
+      <span class="badge">پروفایل کاربری</span>
+      <h2 id="userName">—</h2>
+      <div id="userMeta" class="meta">—</div>
+    </div>
+
+    <div class="grid two">
+      <div class="metric">
+        <div class="label">امتیاز</div>
+        <div id="userPoints" class="value">—</div>
+      </div>
+      <div class="metric">
+        <div class="label">دعوت موفق</div>
+        <div id="userInvites" class="value">—</div>
+      </div>
+      <div class="metric">
+        <div class="label">کمیسیون رفرال</div>
+        <div id="userCommission" class="value">—</div>
+      </div>
+      <div class="metric">
+        <div class="label">اشتراک</div>
+        <div id="userSubscription" class="value">—</div>
+      </div>
+    </div>
+
+    <div class="grid two">
+      <div class="card">
+        <h3 style="margin:0 0 8px">سهمیه روزانه</h3>
+        <div class="progress"><span id="dailyBar"></span></div>
+        <div id="dailyText" class="muted" style="margin-top:8px">—</div>
+      </div>
+      <div class="card">
+        <h3 style="margin:0 0 8px">سهمیه ماهانه</h3>
+        <div class="progress"><span id="monthlyBar"></span></div>
+        <div id="monthlyText" class="muted" style="margin-top:8px">—</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 8px">کدهای رفرال</h3>
+      <div id="refCodes" class="chip-list"></div>
+      <div class="muted" style="margin-top:8px">هر دعوت موفق امتیاز و کمیسیون بیشتری برای شما ایجاد می‌کند.</div>
+    </div>
+  </section>
 
   <section id="analyze" class="card" style="display:none;">
     <div class="row">
@@ -86,6 +383,7 @@
     <select id="style">
       <option value="ict" selected>ICT</option>
       <option value="rtm">RTM</option>
+      <option value="deep">Deep</option>
       <option value="price_action">پرایس اکشن</option>
       <option value="general_prompt">پرامپت عمومی</option>
       <option value="custom_prompt">پرامپت اختصاصی</option>
@@ -116,6 +414,10 @@ function getInitData() {
   return (tg && tg.initData) ? tg.initData : '';
 }
 
+function escapeHtml(text) {
+  return String(text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 async function api(path, body) {
   const res = await fetch('/api' + path, {
     method: 'POST',
@@ -132,13 +434,67 @@ function switchTab(id) {
   document.querySelector(`.tab[data-tab="${id}"]`).classList.add('active');
 }
 
+function marketLabel(market) {
+  switch (market) {
+    case 'crypto': return 'کریپتو';
+    case 'forex': return 'فارکس';
+    case 'metals': return 'فلزات';
+    case 'stocks': return 'سهام';
+    default: return '—';
+  }
+}
+
+function setBar(id, pct) {
+  const el = document.getElementById(id);
+  if (el) el.style.width = Math.max(0, Math.min(100, pct)) + '%';
+}
+
 async function loadDash() {
   const out = await api('/profile', {});
-  document.getElementById('dash').innerHTML = `
-    <h3>پروفایل</h3>
-    <pre>${JSON.stringify(out, null, 2)}</pre>
-    <small>اگر initData ندارید، این صفحه باید داخل Telegram WebApp باز شود.</small>
-  `;
+  if (!out.ok) {
+    document.getElementById('dash').innerHTML = `<div class="card">خطا در دریافت اطلاعات. لطفاً داخل تلگرام باز کنید.</div>`;
+    return;
+  }
+
+  const user = out.user || {};
+  const quota = out.quota || {};
+  const subActive = user.subEnd && user.subEnd > Date.now();
+  const subLabel = subActive ? `فعال تا ${new Date(user.subEnd).toLocaleDateString('fa-IR')}` : 'غیرفعال';
+
+  document.getElementById('userName').textContent = user.name || user.firstName || 'کاربر';
+  document.getElementById('userMeta').textContent = `تجربه: ${user.experience || '—'} | بازار: ${marketLabel(user.favoriteMarket)} | ریسک: ${user.settings?.risk || '—'}`;
+
+  document.getElementById('userPoints').textContent = user.points ?? 0;
+  document.getElementById('userInvites').textContent = user.successfulInvites ?? 0;
+  document.getElementById('userCommission').textContent = `${user.commissionPct ?? 0}%`;
+  document.getElementById('userSubscription').textContent = subLabel;
+
+  const dailyLimit = quota.limitDaily;
+  const monthlyLimit = quota.limitMonthly;
+  const dailyUsed = quota.usedDaily || 0;
+  const monthlyUsed = quota.usedMonthly || 0;
+
+  const dailyPct = dailyLimit === Infinity ? 0 : (dailyUsed / Math.max(1, dailyLimit)) * 100;
+  const monthlyPct = monthlyLimit === Infinity ? 0 : (monthlyUsed / Math.max(1, monthlyLimit)) * 100;
+
+  setBar('dailyBar', dailyPct);
+  setBar('monthlyBar', monthlyPct);
+
+  document.getElementById('dailyText').textContent = dailyLimit === Infinity
+    ? 'نامحدود'
+    : `باقی‌مانده: ${quota.remainingDaily ?? 0} از ${dailyLimit}`;
+  document.getElementById('monthlyText').textContent = monthlyLimit === Infinity
+    ? 'نامحدود'
+    : `باقی‌مانده: ${quota.remainingMonthly ?? 0} از ${monthlyLimit}`;
+
+  const refCodes = document.getElementById('refCodes');
+  refCodes.innerHTML = '';
+  (user.referralCodes || []).forEach((code) => {
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.textContent = code;
+    refCodes.appendChild(chip);
+  });
 }
 
 async function loadBanner() {
@@ -191,7 +547,7 @@ async function requestWithdraw() {
   await loadBanner();
   await loadDash();
   const pub = await api('/wallet/public', {});
-  document.getElementById('walletPublic').innerHTML = `<h3>ولت عمومی</h3><pre>${JSON.stringify(pub, null, 2)}</pre>`;
+  document.getElementById('walletPublic').innerHTML = `<h3>ولت عمومی</h3><pre>${escapeHtml(JSON.stringify(pub, null, 2))}</pre>`;
 })();
 </script>
 </body>
