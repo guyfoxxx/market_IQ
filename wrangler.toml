@@ -9,7 +9,8 @@ crons = ["*/5 * * * *"]
 
 [[kv_namespaces]]
 binding = "USERS_KV"
-id = "PUT_YOUR_KV_NAMESPACE_ID_HERE"
+id =  "8b953a37d3ef4e92a44d99d7ea3fe911"
+               
 
 [vars]
 # از getMe بگیرید و اینجا بگذارید (برای جلوگیری از درخواست اضافه در هر اجرا)
@@ -40,7 +41,7 @@ DEFAULT_NEWS = "OFF"
 PUBLIC_APP_PATH = "/app"
 
 # پنل ادمین (توکن ساده)
-ADMIN_PANEL_TOKEN = "CHANGE_ME"
+ADMIN_PANEL_TOKEN = "Admin"
 
 # اگر خالی بماند، /wallet یک پیام می‌دهد که تنظیم نشده است
 PUBLIC_WALLET_ADDRESS = ""
@@ -50,7 +51,7 @@ AI_PROVIDER = "openai"
 
 # مدل‌ها
 OPENAI_MODEL = "gpt-4.1-mini"
-GEMINI_MODEL = "gemini-1.5-pro"
+GEMINI_MODEL = "gemini-2.5-pro"
 
 # تایم‌زون برای نمایش‌ها
 TZ = "Europe/Berlin"
