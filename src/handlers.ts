@@ -1,7 +1,7 @@
 import type { Env, Storage } from './storage';
 import type { Market, SessionState, Style, UserProfile } from './types';
 import { checkAndConsume } from './quota';
-import { parseCommand, formatDateTime, nowMs } from './utils';
+import { formatDateTime, isAdmin, isOwner, nowMs, parseCommand } from './utils';
 import { fetchCandles } from './data';
 import { renderChartPng } from './chart';
 import { runAnalysis } from './analysis';
@@ -10,6 +10,15 @@ import { generateText } from './ai';
 
 
 function getBotName(env: any) { return (env?.BOT_NAME || 'Market IQ').trim(); }
+function getPaymentLabel(env: any) {
+  const cur = (env?.PAYMENT_CURRENCY || 'USDT').trim();
+  const net = (env?.PAYMENT_NETWORK || 'BEP20').trim();
+  return `${cur} (${net})`;
+}
+function getPublicWallet(env: any, stored?: string) {
+  return (stored || env?.BOT_PUBLIC_WALLET || '').trim();
+}
+
 const WELCOME = `سلام! 👋
 به ربات تحلیل/سیگنال خوش اومدی.
 برای شروع چند سوال کوتاه داریم تا پروفایل و تنظیماتت کامل بشه.`;
@@ -30,7 +39,7 @@ function mainMenu(baseUrl?: string) {
     keyboard,
     resize_keyboard: true,
     is_persistent: true,
-    input_field_placeholder: 'یکی از گزینه‌های منو را انتخاب کن…',
+    input_field_placeholder: 'یکی از گزینه‌ها را انتخاب کن…'
   };
 }
 
@@ -87,13 +96,14 @@ function marketKeyboard(prefix: string) {
 function signalMarketReplyKeyboard() {
   return {
     keyboard: [
-      [{ text: 'CRYPTO' }, { text: 'FOREX' }],
-      [{ text: 'METALS' }, { text: 'STOCKS' }],
+      [{ text: '💎 CRYPTO' }, { text: '💱 FOREX' }],
+      [{ text: '🥇 METALS' }, { text: '📊 STOCKS' }],
       [{ text: '⬅️ منو' }],
     ],
     resize_keyboard: true,
     one_time_keyboard: true,
-    input_field_placeholder: 'بازار را انتخاب کن…',
+    is_persistent: false,
+    input_field_placeholder: 'بازار را انتخاب کن… (با یک لمس)',
   };
 }
 
@@ -124,6 +134,7 @@ function signalSymbolsReplyKeyboard(market: Market) {
     keyboard: rows,
     resize_keyboard: true,
     one_time_keyboard: false,
+    is_persistent: true,
     input_field_placeholder: 'نماد را انتخاب کن یا تایپ کن…',
   };
 }
@@ -191,6 +202,7 @@ function contactKeyboard() {
     keyboard: [[{ text: '📲 ارسال شماره (Share Contact)', request_contact: true }]],
     resize_keyboard: true,
     one_time_keyboard: true,
+    is_persistent: false,
   };
 }
 
@@ -273,6 +285,8 @@ export async function handleUpdate(deps: { tg: any; storage: Storage; env: Env }
 
 async function onCommand(ctx: { tg: any; storage: Storage; env: Env; user: UserProfile; chatId: number; cmd: string; args: string[]; raw: string }) {
   const { tg, storage, env, user, chatId, cmd, args } = ctx;
+  try { await tg.sendChatAction(chatId, 'typing'); } catch {}
+
 
   if (cmd === '/start') {
   const botName = getBotName(env);
@@ -305,9 +319,21 @@ async function onCommand(ctx: { tg: any; storage: Storage; env: Env; user: UserP
   }
 
   if (cmd === '/buy' || cmd === '/pay') {
-    await tg.sendMessage(chatId, `برای خرید اشتراک:\n\n1) مبلغ <b>${storage.subPrice}</b> USDT ارسال کن\n2) سپس دستور زیر را بزن:\n<code>/tx YOUR_TXID</code>\n\nمدت اشتراک: <b>${storage.subDays}</b> روز`, { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
-    return;
-  }
+  const stored = await storage.getPublicWallet();
+  const addr = getPublicWallet(env, stored);
+  const pay = getPaymentLabel(env);
+  const price = await storage.getSubPrice();
+  const days = await storage.getSubDays();
+
+  let msg = `💳 راهنمای خرید اشتراک\n\n`;
+  msg += `• مبلغ: <b>${shortHtml(String(price))}</b> ${shortHtml(pay)}\n`;
+  msg += `• مدت: <b>${shortHtml(String(days))}</b> روز\n\n`;
+  if (addr) msg += `• آدرس ولت: <code>${shortHtml(addr)}</code>\n\n`;
+  msg += `بعد از پرداخت، TxID را ارسال کن:\n<code>/tx YOUR_TXID</code>`;
+
+  await tg.sendMessage(chatId, msg, { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
+  return;
+}
 
   if (cmd === '/tx') {
     const txid = (args[0] || '').trim();
@@ -323,24 +349,19 @@ async function onCommand(ctx: { tg: any; storage: Storage; env: Env; user: UserP
   }
 
   if (cmd === '/wallet') {
-    const w = await storage.getWalletPublic();
-    await tg.sendMessage(chatId, w ? `آدرس ولت عمومی:\n<code>${shortHtml(w)}</code>` : 'ولت عمومی هنوز تنظیم نشده.');
-    return;
-
-if (cmd === '/news') {
-  // /news [market] [symbol]
-  // examples:
-  // /news crypto BTCUSDT
-  // /news forex EUR/USD
-  const a0 = (args?.[0] || '').toLowerCase();
-  const a1 = (args?.[1] || '').toUpperCase();
-  let market = (['crypto','forex','metals','stocks'].includes(a0) ? (a0 as any) : null) as any;
-  let symbol = market ? a1 : (args?.[0] || '').toUpperCase();
-
-  if (!symbol) {
-    await tg.sendMessage(chatId, 'فرمت: /news [crypto|forex|metals|stocks] SYMBOL\nمثال: /news crypto BTCUSDT');
+  const stored = await storage.getPublicWallet();
+  const addr = getPublicWallet(env, stored);
+  if (!addr) {
+    await tg.sendMessage(chatId, `ولت عمومی هنوز تنظیم نشده است.`, { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
     return;
   }
+  await tg.sendMessage(
+    chatId,
+    `آدرس ولت عمومی (برای دریافت <b>${shortHtml(getPaymentLabel(env))}</b>):\n<code>${shortHtml(addr)}</code>`,
+    { reply_markup: mainMenu(env.PUBLIC_BASE_URL) }
+  );
+  return;
+}
 
   if (!market) {
     market = guessMarketFromSymbol(symbol);
@@ -415,7 +436,7 @@ async function onCallback(ctx: { tg: any; storage: Storage; env: Env; user: User
     return;
   }
   if (data === 'go:buy') {
-    await tg.sendMessage(chatId, `برای خرید اشتراک:\n\n1) مبلغ <b>${storage.subPrice}</b> USDT ارسال کن\n2) سپس <code>/tx YOUR_TXID</code>\n\nمدت اشتراک: <b>${storage.subDays}</b> روز`, { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
+    await tg.sendMessage(chatId, `برای خرید اشتراک:\n\n1) مبلغ <b>${await storage.getSubPrice()}</b> USDT ارسال کن\n2) سپس <code>/tx YOUR_TXID</code>\n\nمدت اشتراک: <b>${await storage.getSubDays()}</b> روز`, { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
     return;
   }
   if (data === 'go:ref') {
@@ -573,6 +594,7 @@ if (session.mode === 'signal_market') {
     const png = await renderChartPng({ symbol, candles, zones: analysis.zones });
 
     await tg.sendMessage(chatId, analysis.text, { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
+    try { await tg.sendChatAction(chatId, 'upload_photo'); } catch {}
     await tg.sendPhoto(chatId, png, `چارت ${symbol} با زون‌ها`, { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
 
     await safeEditOrSend(tg, chatId, progressMsgId, `✅ انجام شد: ${symbol}`);
@@ -582,33 +604,9 @@ if (session.mode === 'signal_market') {
   return;
 }
 
-    await tg.sendMessage(chatId, `در حال دریافت دیتا و تحلیل ${symbol} ... ⏳`);
+    
 
-    try {
-      const tf = user.settings.timeframe;
-      const candles = await fetchCandles(env as any, market, symbol, tf);
-      const last = candles.slice(-20);
-      const candlesSummary = last.map(c => `${new Date(c.x).toISOString().slice(0,16)} o:${c.o} h:${c.h} l:${c.l} c:${c.c}`).join(' | ');
-
-      let newsDigest: string | undefined;
-      if (user.settings.news) {
-        const nd = await getNewsDigest({ storage, env, market, symbol, maxItems: 5, cacheTtlSec: 600 });
-        newsDigest = nd.text;
-      }
-
-      const analysis = await runAnalysis({ env, storage, user, market, symbol, timeframe: tf, candlesSummary, newsDigest });
-      const png = await renderChartPng({ symbol, candles, zones: analysis.zones });
-
-      await tg.sendMessage(chatId, analysis.text);
-      if (newsDigest) await tg.sendMessage(chatId, newsDigest);
-      await tg.sendPhoto(chatId, png, `چارت ${symbol} با زون‌ها`);
-    } catch (e: any) {
-      await tg.sendMessage(chatId, `خطا در تحلیل: ${shortHtml(e?.message || String(e))}`);
-    }
-    return;
-  }
-
-  if (session.mode === 'customprompt_wait_text') {
+if (session.mode === 'customprompt_wait_text') {
     const strategy = text.trim();
     if (strategy.length < 20) {
       await tg.sendMessage(chatId, 'متن خیلی کوتاهه. لطفاً توضیح کامل‌تری بده.');
@@ -741,7 +739,7 @@ async function redeem(ctx: { tg: any; storage: Storage; env: Env; user: UserProf
     return;
   }
   user.points -= storage.refRedeemPoints;
-  const addMs = storage.subDays * 24 * 60 * 60 * 1000;
+  const addMs = (await storage.getSubDays()) * 24 * 60 * 60 * 1000;
   const now = Date.now();
   user.subEnd = Math.max(user.subEnd || 0, now) + addMs;
   await storage.putUser(user);
@@ -839,14 +837,14 @@ async function adminCommands(ctx: { tg: any; storage: Storage; env: Env; user: U
     await storage.putPayment(p);
 
     const target = await storage.ensureUser(p.userId);
-    const addMs = storage.subDays * 24 * 60 * 60 * 1000;
+    const addMs = (await storage.getSubDays()) * 24 * 60 * 60 * 1000;
     target.subEnd = Math.max(target.subEnd || 0, Date.now()) + addMs;
 
     // referral rewards & commission
     if (target.referrerId) {
       const ref = await storage.ensureUser(target.referrerId);
       ref.points += storage.refPointsPerSubPurchase;
-      const commission = storage.subPrice * (ref.commissionPct / 100);
+      const commission = (await storage.getSubPrice()) * (ref.commissionPct / 100);
       ref.commissionBalance += commission;
       await storage.putUser(ref);
       await tg.sendMessage(ref.id, `💰 خرید اشتراک توسط زیرمجموعه شما تایید شد.\nامتیاز +${storage.refPointsPerSubPurchase}\nکمیسیون +${commission}`);
@@ -874,15 +872,30 @@ async function adminCommands(ctx: { tg: any; storage: Storage; env: Env; user: U
   }
 
   if (cmd === '/setwallet') {
-    const addr = args.join(' ').trim();
-    await storage.setWalletPublic(addr);
-    await tg.sendMessage(chatId, 'ولت عمومی ذخیره شد ✅');
-    // owner alert
-    if (!storage.isOwner(user.id) && env.OWNER_ID) {
-      await tg.sendMessage(Number(env.OWNER_ID), `⚠️ آدرس ولت عمومی تغییر کرد توسط admin ${user.id}\nNew: <code>${shortHtml(addr)}</code>`);
-    }
+  if (!isAdmin(env, user.id)) {
+    await tg.sendMessage(chatId, '⛔️ دسترسی ندارید.', { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
     return;
   }
+  const addr = (args[0] || '').trim();
+  if (!addr) {
+    await tg.sendMessage(chatId, 'فرمت: /setwallet WALLET_ADDRESS', { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
+    return;
+  }
+  await storage.setPublicWallet(addr);
+  await tg.sendMessage(
+    chatId,
+    `✅ ولت عمومی تنظیم شد:\n<code>${shortHtml(addr)}</code>\nشبکه: <b>${shortHtml(getPaymentLabel(env))}</b>`,
+    { reply_markup: mainMenu(env.PUBLIC_BASE_URL) }
+  );
+
+  const owners = (await storage.getOwnersFromEnv(env)).filter((id: number) => id !== user.id);
+  for (const oid of owners) {
+    try {
+      await tg.sendMessage(oid, `⚠️ هشدار تغییر ولت عمومی\nولت جدید: <code>${shortHtml(addr)}</code>\nتوسط: ${shortHtml(user.first_name || user.username || String(user.id))}`);
+    } catch {}
+  }
+  return;
+}
 
   if (cmd === '/setfreelimit') {
     const n = Number(args[0]);

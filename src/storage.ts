@@ -1,7 +1,12 @@
 import type { BannerConfig, LimitsConfig, PaymentRecord, SessionState, UserProfile } from './types';
-import { asBool, asInt, nowMs, stableHash } from './utils';
+import { asBool, asInt, nowMs, stableHash, parseIdList } from './utils';
 
 export interface Env {
+  BOT_PUBLIC_WALLET?: string;
+  PAYMENT_NETWORK?: string;
+  PAYMENT_CURRENCY?: string;
+  BOT_NAME?: string;
+  OWNER_IDS?: string; // comma/space separated telegram user ids
   DB: KVNamespace;
 
   OWNER_ID?: string;
@@ -40,14 +45,20 @@ export class Storage {
     return this.env.TIMEZONE || 'Europe/Berlin';
   }
 
-  isOwner(userId: number) {
-    return String(userId) === String(this.env.OWNER_ID || '');
-  }
+isOwner(userId: number) {
+  const owners = new Set<number>([
+    ...parseIdList((this.env as any).OWNER_IDS),
+    ...(((this.env as any).OWNER_ID ? [Number((this.env as any).OWNER_ID)] : [])),
+  ]);
+  return owners.has(userId);
+}
 
-  isAdmin(userId: number) {
-    const admins = (this.env.ADMIN_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
-    return this.isOwner(userId) || admins.includes(String(userId));
-  }
+isAdmin(userId: number) {
+  if (this.isOwner(userId)) return true;
+  const admins = parseIdList((this.env as any).ADMIN_IDS);
+  return admins.includes(userId);
+}
+
 
   async getUser(userId: number): Promise<UserProfile | null> {
     return await this.env.DB.get(`user:${userId}`, { type: 'json' });
@@ -226,9 +237,37 @@ export class Storage {
     return asInt(this.env.REF_COMMISSION_MAX_PCT, 20);
   }
   get subPrice() {
-    return asInt(this.env.SUB_PRICE, 10);
+    return asInt(this.env.SUB_PRICE, 2);
   }
   get subDays() {
     return asInt(this.env.SUB_DAYS, 30);
   }
+
+
+// ---- wallet ----
+async setPublicWallet(addr: string) {
+  await this.env.DB.put('config:public_wallet', addr);
+}
+async getPublicWallet(): Promise<string> {
+  return (await this.env.DB.get('config:public_wallet')) || (this.env as any).BOT_PUBLIC_WALLET || '';
+}
+
+// ---- subscription config (runtime configurable via KV) ----
+async getSubPrice(): Promise<number> {
+  const v = await this.env.DB.get('config:sub_price');
+  if (v) return Number(v);
+  return this.subPrice;
+}
+async setSubPrice(n: number) {
+  await this.env.DB.put('config:sub_price', String(n));
+}
+async getSubDays(): Promise<number> {
+  const v = await this.env.DB.get('config:sub_days');
+  if (v) return Number(v);
+  return this.subDays;
+}
+async setSubDays(n: number) {
+  await this.env.DB.put('config:sub_days', String(n));
+}
+
 }

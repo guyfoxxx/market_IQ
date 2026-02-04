@@ -91,3 +91,24 @@ export async function fetchWithTimeout(input: RequestInfo | URL, init: RequestIn
     clearTimeout(id);
   }
 }
+
+
+export function parseIdList(v?: string): number[] {
+  return (v || '')
+    .split(/[,\s]+/)
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(s => Number(s))
+    .filter(n => Number.isFinite(n) && n > 0);
+}
+
+export function isOwner(env: any, userId: number): boolean {
+  const owners = parseIdList(env?.OWNER_IDS);
+  return owners.includes(userId);
+}
+
+export function isAdmin(env: any, userId: number): boolean {
+  if (isOwner(env, userId)) return true;
+  const admins = parseIdList(env?.ADMIN_IDS);
+  return admins.includes(userId);
+}

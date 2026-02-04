@@ -1,91 +1,103 @@
-export type Risk = "LOW" | "MEDIUM" | "HIGH";
-export type Style = "RTM" | "ICT" | "PA" | "ATR" | "GENERAL" | "CUSTOM";
-export type Timeframe = "M15" | "H1" | "H4" | "D1";
+export type Market = 'crypto' | 'forex' | 'metals' | 'stocks';
 
-export type Market = "CRYPTO" | "FOREX" | "METALS" | "STOCKS";
+export type Experience = 'beginner' | 'intermediate' | 'pro';
+export type Risk = 'low' | 'medium' | 'high';
 
-export type Role = "USER" | "ADMIN" | "OWNER";
+export type Style =
+  | 'rtm'
+  | 'ict'
+  | 'price_action'
+  | 'general_prompt'
+  | 'custom_prompt';
 
-export interface Settings {
-  timeframe: Timeframe;
+export interface UserSettings {
+  timeframe: string; // e.g. H1/H4/D1
   risk: Risk;
   style: Style;
-  news: "ON" | "OFF";
-  selectedPlanId?: string;
+  news: boolean;
 }
 
-export interface Subscription {
-  active: boolean;
-  expiresAt?: string; // ISO
-  planDays?: number;
-  lastTxId?: string;
-}
-
-export interface QuotaState {
-  dailyUsed: number;
-  monthlyUsed: number;
-  lastDailyReset: string;   // YYYY-MM-DD (UTC)
-  lastMonthlyReset: string; // YYYY-MM
-}
-
-export interface LevelInfo {
+export interface LevelResult {
   level: string;
   summary: string;
-  suggestedMarket?: string;
-  suggestedSettings?: Partial<Settings>;
-  updatedAt: string;
-}
-
-export interface WalletInfo {
-  bep20Address?: string;
-  balance?: number;
+  suggestedMarket: Market;
+  suggestedSettings: Partial<UserSettings>;
 }
 
 export interface UserProfile {
   id: number;
   username?: string;
   firstName?: string;
+
   name?: string;
   phone?: string;
-  experience?: "BEGINNER" | "INTERMEDIATE" | "PRO";
+
+  experience?: Experience;
   favoriteMarket?: Market;
-  createdAt: string;
 
-  role: Role;
-
-  settings: Settings;
-  quota: QuotaState;
+  settings: UserSettings;
 
   points: number;
   successfulInvites: number;
 
+  commissionPct: number;
+  commissionBalance: number;
+
+  subEnd?: number; // epoch ms
+  level?: LevelResult;
+
+  referralCodes: string[];
   referrerId?: number;
-  refCodes: string[]; // 5 codes
 
-  referralCommissionPct: number;
+  bep20Address?: string;
+  balance?: number;
 
-  subscription: Subscription;
+  createdAt: number;
+  updatedAt: number;
 
-  customPrompt?: {
-    ready: boolean;
-    text?: string;
-    generatedAt?: string;
-  };
+  customPrompt?: string;
+  customPromptReady?: boolean;
+}
 
-  wallet: WalletInfo;
+export interface LimitsConfig {
+  freeDaily: number;
+  freeMonthly: number;
+  subDaily: number;
+}
 
-  offerBannerSeenAt?: string;
-
-  levelInfo?: LevelInfo;
+export interface BannerConfig {
+  enabled: boolean;
+  text: string;
+  url: string;
 }
 
 export interface PaymentRecord {
   txid: string;
   userId: number;
-  status: "PENDING" | "APPROVED" | "REJECTED";
-  createdAt: string;
-  reviewedAt?: string;
-  reviewerId?: number;
-  amountUsdt?: number;
-  planDays?: number;
+  amount?: number;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: number;
+  decidedAt?: number;
+  note?: string;
+}
+
+export type SessionMode =
+  | 'onboarding_name'
+  | 'onboarding_contact'
+  | 'onboarding_experience'
+  | 'onboarding_market'
+  | 'onboarding_timeframe'
+  | 'onboarding_risk'
+  | 'onboarding_style'
+  | 'onboarding_news'
+  | 'level_q'
+  | 'signal_market'
+  | 'signal_symbol'
+  | 'customprompt_wait_text';
+
+export interface SessionState {
+  mode: SessionMode;
+  step?: number;
+  answers?: string[];
+  temp?: Record<string, any>;
 }

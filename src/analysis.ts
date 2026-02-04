@@ -62,7 +62,9 @@ function defaultBasePrompt() {
 `;
 }
 
-function stylePrompt(style: Style) {
+
+
+function perStylerompt(style: Style) {
   switch (style) {
     case 'rtm':
       return `تمرکز روی RTM: زون‌های عرضه/تقاضا، QM، FTR، پایه رنج‌ها، اعتبار زون‌ها.`;
@@ -91,7 +93,7 @@ export async function runAnalysis(opts: {
 }): Promise<AnalysisResult> {
   const base = (await opts.storage.getPrompt('base')) || defaultBasePrompt();
   const style = opts.user.settings.style;
-  const perStyle = (await opts.storage.getPrompt(`style:${style}`)) || stylePrompt(style);
+  const perStyle = (await opts.storage.getPrompt(`style:${style}`)) || perStylerompt(style);
 
   const userPromptPieces: string[] = [];
   if (style === 'general_prompt') {
@@ -123,7 +125,18 @@ ${opts.newsDigest}`
 ${userPromptPieces.join('\n\n')}
 
 الان تحلیل را طبق قالب بده و در انتها JSON سختگیرانه zones را قرار بده.`;
-  const system = `${base}\n\n---\nسبک/استراتژی:\n${perStyle}`;
+  const vision = await opts.storage.getPrompt('vision');
+  const system = `${base}
+
+---
+${perStyle}
+
+${vision ? `
+---
+Vision Prompt (برای توضیح تصویر/چارت):
+${vision}` : ''}
+
+داده‌های OHLC به صورت JSON در پیام کاربر خواهد آمد.`;
   const text = await generateText(opts.env, { system, user: userText, temperature: 0.3 });
 
   let extracted = extractZonesDetailed(text);

@@ -65,6 +65,11 @@ export class Telegram {
     return this.callForm('sendPhoto', form);
   }
 
+
+sendChatAction(chat_id: number, action: 'typing'|'upload_photo'|'upload_document'|'choose_sticker'|'find_location'|'record_video'|'record_voice'|'record_video_note'|'upload_video'|'upload_voice'|'upload_video_note') {
+  return this.callJson('sendChatAction', { chat_id, action });
+}
+
   getMe() {
     return this.callJson('getMe', {});
   }
