@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '../utils';
 import type { Candle } from './types';
 
 export async function fetchTwelveData(opts: { symbol: string; interval: string; apiKey: string; outputsize?: number }): Promise<Candle[]> {
@@ -8,29 +9,18 @@ export async function fetchTwelveData(opts: { symbol: string; interval: string; 
   url.searchParams.set('outputsize', String(opts.outputsize ?? 120));
   url.searchParams.set('format', 'JSON');
 
-  const res = await fetch(url.toString());
+  const res = await fetchWithTimeout(url.toString(), 8_000);
   if (!res.ok) throw new Error(`TwelveData error: ${res.status} ${await res.text()}`);
-  const j = (await res.json()) as any;
+  const j = await res.json() as any;
   if (j.status === 'error') throw new Error(`TwelveData: ${j.message}`);
   const values = j.values || [];
-  const out: Candle[] = values
-    .map((v: any) => {
-      // TwelveData often returns `YYYY-MM-DD HH:mm:ss` (no timezone). We normalize to ISO.
-      const raw = String(v.datetime || '');
-      let iso = raw;
-      if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(iso)) iso = iso.replace(' ', 'T');
-      // If no timezone provided, assume UTC.
-      if (!/(Z|[+\-]\d{2}:?\d{2})$/i.test(iso)) iso = iso + 'Z';
-      const x = Date.parse(iso);
-      return {
-        x,
-        o: Number(v.open),
-        h: Number(v.high),
-        l: Number(v.low),
-        c: Number(v.close),
-      } as Candle;
-    })
-    .filter((c: Candle) => Number.isFinite(c.x) && [c.o, c.h, c.l, c.c].every(Number.isFinite));
+  const out: Candle[] = values.map((v: any) => ({
+    x: Date.parse(v.datetime.endsWith('Z') ? v.datetime : v.datetime + 'Z'),
+    o: Number(v.open),
+    h: Number(v.high),
+    l: Number(v.low),
+    c: Number(v.close),
+  })).filter((c: Candle) => [c.o,c.h,c.l,c.c].every(Number.isFinite));
   out.sort((a, b) => a.x - b.x);
   return out;
 }

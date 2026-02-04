@@ -1,10 +1,11 @@
+import { fetchWithTimeout } from '../utils';
 import type { Candle } from './types';
 
 export async function fetchPolygonAggs(opts: { ticker: string; multiplier: number; timespan: string; from: string; to: string; apiKey: string }): Promise<Candle[]> {
   const url = `https://api.polygon.io/v2/aggs/ticker/${encodeURIComponent(opts.ticker)}/range/${opts.multiplier}/${opts.timespan}/${opts.from}/${opts.to}?adjusted=true&sort=asc&limit=50000&apiKey=${encodeURIComponent(opts.apiKey)}`;
-  const res = await fetch(url);
+  const res = await fetchWithTimeout(url, 8_000);
   if (!res.ok) throw new Error(`Polygon error: ${res.status} ${await res.text()}`);
-  const j = (await res.json()) as any;
+  const j = await res.json() as any;
   const results = j.results || [];
   return results.map((r: any) => ({
     x: Number(r.t),

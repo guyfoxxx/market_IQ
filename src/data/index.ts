@@ -14,18 +14,6 @@ export interface DataEnv {
   POLYGON_API_KEY?: string;
 }
 
-function mapTimeframeToTwelveInterval(timeframe: string) {
-  const tf = (timeframe || '').toUpperCase();
-  if (tf === 'H1') return '1h';
-  if (tf === 'H4') return '4h';
-  if (tf === 'D1') return '1day';
-  if (tf === 'W1') return '1week';
-  if (tf.startsWith('H')) return '1h';
-  if (tf.startsWith('D')) return '1day';
-  if (tf.startsWith('W')) return '1week';
-  return '1day';
-}
-
 export async function fetchCandles(env: DataEnv, market: Market, symbol: string, timeframe: string): Promise<Candle[]> {
   // Priority / fallback chain:
   // crypto: Binance -> Yahoo
@@ -44,7 +32,7 @@ export async function fetchCandles(env: DataEnv, market: Market, symbol: string,
 
   if (market === 'forex') {
     if (env.TWELVEDATA_API_KEY) {
-      const interval = mapTimeframeToTwelveInterval(timeframe);
+      const interval = timeframe.toUpperCase().startsWith('H') ? '1h' : '1day';
       return await fetchTwelveData({ symbol, interval, apiKey: env.TWELVEDATA_API_KEY });
     }
     if (env.ALPHAVANTAGE_API_KEY) {
@@ -57,7 +45,7 @@ export async function fetchCandles(env: DataEnv, market: Market, symbol: string,
 
   if (market === 'metals') {
     if (env.TWELVEDATA_API_KEY) {
-      const interval = mapTimeframeToTwelveInterval(timeframe);
+      const interval = timeframe.toUpperCase().startsWith('H') ? '1h' : '1day';
       return await fetchTwelveData({ symbol, interval, apiKey: env.TWELVEDATA_API_KEY });
     }
     return await fetchYahooChart(symbol, timeframe);

@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '../utils';
 import type { Candle } from './types';
 
 export async function fetchAlphaVantageFX(opts: { from: string; to: string; apiKey: string }): Promise<Candle[]> {
@@ -8,9 +9,9 @@ export async function fetchAlphaVantageFX(opts: { from: string; to: string; apiK
   url.searchParams.set('outputsize', 'compact');
   url.searchParams.set('apikey', opts.apiKey);
 
-  const res = await fetch(url.toString());
+  const res = await fetchWithTimeout(url.toString(), 8_000);
   if (!res.ok) throw new Error(`AlphaVantage error: ${res.status} ${await res.text()}`);
-  const j = (await res.json()) as any;
+  const j = await res.json() as any;
   const series = j['Time Series FX (Daily)'];
   if (!series) throw new Error(`AlphaVantage: no series (check key / limits)`);
   const out: Candle[] = [];

@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '../utils';
 import type { Candle } from './types';
 
 const TF_MAP: Record<string, string> = {
@@ -18,11 +19,11 @@ export async function fetchBinanceKlines(symbol: string, timeframe: string, limi
   url.searchParams.set('interval', interval);
   url.searchParams.set('limit', String(limit));
 
-  const res = await fetch(url.toString());
+  const res = await fetchWithTimeout(url.toString(), 8_000);
   if (!res.ok) throw new Error(`Binance error: ${res.status} ${await res.text()}`);
-  const data = (await res.json()) as any[];
+  const data = await res.json() as any;
 
-  return data.map((k: any) => ({
+  return (data as any[]).map((k: any[]) => ({
     x: Number(k[0]),
     o: Number(k[1]),
     h: Number(k[2]),

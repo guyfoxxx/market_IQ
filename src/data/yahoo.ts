@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '../utils';
 import type { Candle } from './types';
 
 export async function fetchYahooChart(ticker: string, timeframe: string, range?: string): Promise<Candle[]> {
@@ -7,9 +8,9 @@ export async function fetchYahooChart(ticker: string, timeframe: string, range?:
   const r = range || (timeframe.toUpperCase().startsWith('M') ? '1d' : timeframe.toUpperCase().startsWith('H') ? '7d' : '6mo');
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=${encodeURIComponent(interval)}&range=${encodeURIComponent(r)}`;
 
-  const res = await fetch(url);
+  const res = await fetchWithTimeout(url, 8_000);
   if (!res.ok) throw new Error(`Yahoo error: ${res.status} ${await res.text()}`);
-  const j = (await res.json()) as any;
+  const j = await res.json() as any;
   const result = j?.chart?.result?.[0];
   if (!result) throw new Error('Yahoo: empty result');
 

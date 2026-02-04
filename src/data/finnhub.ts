@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '../utils';
 import type { Candle } from './types';
 
 export async function fetchFinnhubStock(opts: { symbol: string; resolution: string; apiKey: string; from: number; to: number }): Promise<Candle[]> {
@@ -8,9 +9,9 @@ export async function fetchFinnhubStock(opts: { symbol: string; resolution: stri
   url.searchParams.set('to', String(opts.to));
   url.searchParams.set('token', opts.apiKey);
 
-  const res = await fetch(url.toString());
+  const res = await fetchWithTimeout(url.toString(), 8_000);
   if (!res.ok) throw new Error(`Finnhub error: ${res.status} ${await res.text()}`);
-  const j = (await res.json()) as any;
+  const j = await res.json() as any;
   if (j.s !== 'ok') throw new Error(`Finnhub: ${j.s}`);
   const out: Candle[] = [];
   for (let i = 0; i < (j.t?.length || 0); i++) {
