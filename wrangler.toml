@@ -9,7 +9,7 @@ crons = ["*/5 * * * *"]
 
 [[kv_namespaces]]
 binding = "USERS_KV"
-id = 8b953a37d3ef4e92a44d99d7ea3fe911"
+id = "8b953a37d3ef4e92a44d99d7ea3fe911"
 
 [vars]
 # از getMe بگیرید و اینجا بگذارید (برای جلوگیری از درخواست اضافه در هر اجرا)
