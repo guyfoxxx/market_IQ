@@ -4,7 +4,7 @@ import { ensureUser, getBanner, getPublicWallet, getPromptBase, getPromptVision,
 import { remaining, consume } from "./lib/quota";
 import { escapeHtml, parseIntSafe } from "./lib/utils";
 import { callAI, extractJsonBlock } from "./lib/ai";
-import { fetchCandles } from "./lib/data";
+import { fetchCandlesWithMeta } from "./lib/data";
 import { normalizeZoneForApi, quickChartUrlFromApi } from "./lib/miniHelpers";
 
 function json(data: any, status = 200) {
@@ -73,7 +73,7 @@ export async function handleApi(req: Request, env: Env): Promise<Response> {
     if (!symbol) return json({ ok: false, error: "symbol required" }, 400);
 
     try {
-      const candles = await fetchCandles(env, market as any, symbol, user.settings.timeframe as any, 200);
+      const { candles, source: dataSource, normalizedSymbol } = await fetchCandlesWithMeta(env, market as any, symbol, user.settings.timeframe as any, 200);
       const base = await getPromptBase(env);
       const stylePrompt = user.settings.style === "CUSTOM" && user.customPrompt?.ready && user.customPrompt.text
         ? user.customPrompt.text
@@ -93,17 +93,19 @@ news=${user.settings.news}
 [Market]
 market=${market}
 symbol=${symbol}
+data_source=${dataSource}
+normalized_symbol=${normalizedSymbol}
 
 [OHLC summary]
 ${candleSummary}
 
-در انتها دقیقاً یک بلوک JSON با ```json تولید کن با zones و levels.
+در انتها دقیقاً یک بلوک JSON با \`\`\`json تولید کن با zones و levels.
 `;
       const out = await callAI(env, analysisPrompt, { temperature: 0.15 });
       const j = extractJsonBlock(out);
       const zones = normalizeZoneForApi(j?.zones);
       const chartUrl = zones.length ? quickChartUrlFromApi(symbol, candles, zones) : null;
-      return json({ ok: true, text: out, chartUrl, zones });
+      return json({ ok: true, text: out, chartUrl, zones, meta: { dataSource, normalizedSymbol } });
     } catch (e: any) {
       return json({ ok: false, error: e?.message ?? "error" }, 500);
     }

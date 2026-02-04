@@ -1,4 +1,6 @@
 export interface Env {
+  // Cloudflare Workers AI binding (set in wrangler.toml: [ai] binding = "AI")
+  AI: any;
   BOT_TOKEN: string;
   BOT_INFO: string;
 
@@ -58,4 +60,12 @@ export interface Env {
   PAYMENT_TOKEN_CONTRACT: string;
   AUTO_VERIFY_PAYMENTS: string;
   MIN_CONFIRMATIONS: string;
+
+  DATA_SOURCES_OTHER?: string;
+
+  DATA_SOURCES_CRYPTO?: string;
+
+  CLOUDFLARE_AI_MODEL?: string;
+
+  AI_CHAIN?: string;
 }
