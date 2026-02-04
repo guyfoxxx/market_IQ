@@ -213,7 +213,7 @@ export function createBot(env: Env) {
       await safeReply(ctx, "📞 برای ادامه، لطفاً شماره خود را Share کنید:", { reply_markup: kb });
       return;
     }
-    await showMenu(ctx);
+    await showMenu(ctx, env);
   });
 
   bot.command("signals", async (ctx) => {
@@ -513,7 +513,7 @@ if (data === "planlist") {
     // Menu
     if (data === "menu:home") {
       await ctx.answerCallbackQuery();
-      await showMenu(ctx);
+      await showMenu(ctx, env);
       return;
     }
     if (data === "menu:signals") {
@@ -910,7 +910,7 @@ ${txt}`);
       }
 
       await safeReply(ctx, "✅ آنبوردینگ تکمیل شد!");
-      await showMenu(ctx);
+      await showMenu(ctx, env);
       return;
     }
 
