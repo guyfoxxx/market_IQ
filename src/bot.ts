@@ -6,18 +6,13 @@ import { fetchCandles } from "./lib/data";
 import { quickChartUrl, type Zone } from "./lib/chart";
 import { enqueue } from "./lib/queue";
 import { newJobId, type Job } from "./lib/jobs";
-import {
-  consume,
-  ensureQuotaReset,
-  isAdmin,
-  isOwner,
-  remaining,
-} from "./lib/quota";
+import { consume, ensureQuotaReset, isAdmin, remaining } from "./lib/quota";
 import {
   ensureUser,
   getPayment,
   getPromptBase,
   getPromptStyle,
+  getPromptVision,
   getPublicWallet,
   getPlans,
   findPlan,
@@ -27,10 +22,6 @@ import {
   putCustomPromptTask,
   putPayment,
   putUser,
-  setBanner,
-  setPromptBase,
-  setPromptStyle,
-  setPromptVision,
   setPublicWallet,
   setSelectedPlan,
 } from "./lib/storage";
@@ -40,7 +31,6 @@ import {
   nowIso,
   parseFloatSafe,
   parseIntSafe,
-  escapeHtml,
 } from "./lib/utils";
 
 type MyContext = Context & {
@@ -70,44 +60,41 @@ async function getState(env: Env, userId: number): Promise<FlowState | null> {
   const raw = await env.USERS_KV.get(STATE_KEY(userId));
   return raw ? JSON.parse(raw) : null;
 }
-
 async function setState(env: Env, userId: number, state: FlowState | null) {
   if (!state) {
     await env.USERS_KV.delete(STATE_KEY(userId));
     return;
   }
   await env.USERS_KV.put(STATE_KEY(userId), JSON.stringify(state), {
-    expirationTtl: 60 * 60 * 6, // 6h
-  });
+    expirationTtl: 60 * 60 * 6,
+  }); // 6h
 }
 
-function mainMenuReplyKb() {
-  return new Keyboard()
-    .text("📈 تحلیل/سیگنال")
-    .text("⚙️ تنظیمات")
+function mainMenuKb() {
+  return new InlineKeyboard()
+    .text("📈 تحلیل/سیگنال", "menu:signals")
+    .text("⚙️ تنظیمات", "menu:settings")
     .row()
-    .text("👤 پروفایل")
-    .text("💳 خرید اشتراک")
+    .text("👤 پروفایل", "menu:profile")
+    .text("💳 خرید اشتراک", "menu:buy")
     .row()
-    .text("🏦 ولت")
-    .text("🎁 رفرال")
+    .text("🎁 رفرال", "menu:ref")
+    .text("🧠 تعیین سطح", "menu:level")
     .row()
-    .text("🧠 تعیین سطح")
-    .text("🆘 پشتیبانی")
+    .text("🆘 پشتیبانی", "menu:support")
+    .text("📚 آموزش", "menu:education")
     .row()
-    .text("📚 آموزش")
-    .text("📱 Mini App")
-    .resized();
+    .text("📱 Mini App", "menu:app");
 }
 
 function toMarketLabel(m: Market) {
   return m === "CRYPTO"
     ? "کریپتو"
     : m === "FOREX"
-      ? "فارکس"
-      : m === "METALS"
-        ? "فلزات"
-        : "سهام";
+    ? "فارکس"
+    : m === "METALS"
+    ? "فلزات"
+    : "سهام";
 }
 
 function settingsText(u: UserProfile) {
@@ -136,8 +123,6 @@ function settingsKb(u: UserProfile) {
     .row()
     .text("ATR", "set:style:ATR")
     .text("RTM", "set:style:RTM")
-    .text("DEEP", "set:style:DEEP")
-    .row()
     .text("CUSTOM", "set:style:CUSTOM")
     .row()
     .text("News ON", "set:news:ON")
@@ -165,51 +150,20 @@ async function notifyAdmins(env: Env, bot: Bot<MyContext>, text: string) {
   for (const id of targets) {
     try {
       await bot.api.sendMessage(id, text);
-    } catch { }
+    } catch {}
   }
 }
 
-async function safeReplyPlain(ctx: any, text: string, extra: any = {}) {
-  return ctx.reply(text, { disable_web_page_preview: true, ...extra });
-}
+async function showMenu(ctx: MyContext) {
+  const u = requireUser(ctx);
+  await ensureQuotaReset(ctx.env, u);
 
-async function safeReply(ctx: any, text: string, extra: any = {}) {
-  return ctx.reply(text, {
-    parse_mode: "HTML",
-    disable_web_page_preview: true,
-    ...extra,
-  });
-}
-
-async function safeEdit(ctx: any, text: string, extra: any = {}) {
-  return ctx.editMessageText(text, {
-    parse_mode: "HTML",
-    disable_web_page_preview: true,
-    ...extra,
-  });
-}
-
-async function showMenu(ctx: any, env: Env) {
-  const u = await ensureUser(env, {
-    id: ctx.from!.id,
-    username: ctx.from!.username,
-    firstName: ctx.from!.first_name,
-  });
-
-  await ensureQuotaReset(env, u);
-
-  const displayName = u.name || u.firstName || "";
-
-  const text =
-    `Market IQ ✅\n\n` +
-    `👋 خوش آمدی ${displayName}\n\n` +
-    `از دکمه‌های منو انتخاب کن (بدون نیاز به تایپ دستور):\n` +
-    `• شروع تحلیل\n` +
-    `• تنظیمات و پروفایل\n` +
-    `• خرید اشتراک و ولت\n` +
-    `• رفرال و پشتیبانی`;
-
-  await safeReplyPlain(ctx, text, { reply_markup: mainMenuReplyKb() });
+  await ctx.reply(
+    `👋 سلام ${u.name || u.firstName || ""}\n\n` +
+      `✨ به *Market IQ Signal Bot* خوش آمدی.\n` +
+      `از منوی زیر یکی را انتخاب کن:`,
+    { reply_markup: mainMenuKb(), parse_mode: "Markdown" }
+  );
 }
 
 export function createBot(env: Env) {
@@ -217,8 +171,93 @@ export function createBot(env: Env) {
     botInfo: JSON.parse(env.BOT_INFO || "{}"),
   });
 
-  async function startSignalsFlow(ctx: MyContext) {
+  bot.use(async (ctx, next) => {
+    ctx.env = env;
+    if (ctx.from) {
+      ctx.user = await ensureUser(env, {
+        id: ctx.from.id,
+        username: ctx.from.username,
+        firstName: ctx.from.first_name,
+      });
+    }
+    await next();
+  });
+
+  bot.catch(async (err) => {
+    console.log("BOT ERROR", err.error);
+    try {
+      await err.ctx.reply(
+        "❌ خطای داخلی رخ داد. لطفاً دوباره تلاش کنید یا /support را بزنید."
+      );
+    } catch {}
+  });
+
+  // Commands
+  bot.command(["start", "menu"], async (ctx) => {
     const u = requireUser(ctx);
+    const st = await getState(env, u.id);
+
+    // referral: /start CODE
+    const text = ctx.message?.text ?? "";
+    const code = text.split(" ")[1]?.trim();
+    if (code) {
+      const referrerId = await getReferrerByCode(env, code);
+      if (referrerId && referrerId !== u.id && !u.referrerId) {
+        u.referrerId = referrerId;
+        await putUser(env, u);
+      }
+    }
+
+    if (u.onboardingComplete) {
+      await showMenu(ctx);
+      return;
+    }
+
+    if (!u.name) {
+      await setState(env, u.id, { flow: "onboarding", step: "ask_name" });
+      await ctx.reply("👤 لطفاً نام خود را ارسال کنید:");
+      return;
+    }
+
+    if (u.phone && st?.flow === "onboarding" && st.step === "ask_contact") {
+      await setState(env, u.id, { flow: "onboarding", step: "ask_experience" });
+      const kb = new InlineKeyboard()
+        .text("مبتدی", "ob:exp:BEGINNER")
+        .text("متوسط", "ob:exp:INTERMEDIATE")
+        .text("حرفه‌ای", "ob:exp:PRO");
+      await ctx.reply("تجربه شما در بازار؟", { reply_markup: kb });
+      return;
+    }
+
+    if (!u.phone) {
+      await setState(env, u.id, { flow: "onboarding", step: "ask_contact" });
+      const kb = new Keyboard()
+        .requestContact("📞 ارسال شماره (Share Contact)")
+        .resized()
+        .oneTime();
+      await ctx.reply("📞 برای ادامه، لطفاً شماره خود را Share کنید:", {
+        reply_markup: kb,
+      });
+      return;
+    }
+
+    await showMenu(ctx);
+  });
+
+  bot.command("signals", async (ctx) => {
+    const u = requireUser(ctx);
+    await ensureQuotaReset(env, u);
+    const q = remaining(env, u);
+
+    if (
+      (q.dailyLeft !== Infinity && q.dailyLeft < 1) ||
+      (q.monthLeft !== Infinity && q.monthLeft < 1)
+    ) {
+      await ctx.reply(`سهمیه شما کافی نیست.
+برای مشاهده سهمیه: /profile`);
+      return;
+    }
+
     await setState(env, u.id, { flow: "signals", step: "choose_market" });
     const kb = new InlineKeyboard()
       .text("CRYPTO", "sig:market:CRYPTO")
@@ -228,15 +267,16 @@ export function createBot(env: Env) {
       .text("STOCKS", "sig:market:STOCKS")
       .row()
       .text("⬅️ منو", "menu:home");
-    await safeReply(ctx, "مرحله ۱/۲: بازار را انتخاب کن:", { reply_markup: kb });
-  }
 
-  async function showSettings(ctx: MyContext) {
+    await ctx.reply("بازار را انتخاب کن:", { reply_markup: kb });
+  });
+
+  bot.command("settings", async (ctx) => {
     const u = requireUser(ctx);
-    await safeReply(ctx, settingsText(u), { reply_markup: settingsKb(u) });
-  }
+    await ctx.reply(settingsText(u), { reply_markup: settingsKb(u) });
+  });
 
-  async function showProfile(ctx: MyContext) {
+  bot.command("profile", async (ctx) => {
     const u = requireUser(ctx);
     await ensureQuotaReset(env, u);
     const q = remaining(env, u);
@@ -254,169 +294,40 @@ export function createBot(env: Env) {
 
 ⭐ امتیاز: ${u.points}
 👥 دعوت موفق: ${u.successfulInvites}
-💰 کمیسیون رفرال: ${u.referralCommissionPct}%
+💰 کمیسیون رفرال: ${u.referralCommissionPct}% 
 
 📌 سهمیه:
-• روزانه مصرف‌شده: ${u.quota.dailyUsed} | باقی‌مانده: ${q.dailyLeft === Infinity ? "نامحدود" : q.dailyLeft}
-• ماهانه مصرف‌شده: ${u.quota.monthlyUsed} | باقی‌مانده: ${q.monthLeft === Infinity ? "نامحدود" : q.monthLeft}
+• روزانه مصرف‌شده: ${u.quota.dailyUsed} | باقی‌مانده: ${
+      q.dailyLeft === Infinity ? "نامحدود" : q.dailyLeft
+    }
+• ماهانه مصرف‌شده: ${u.quota.monthlyUsed} | باقی‌مانده: ${
+      q.monthLeft === Infinity ? "نامحدود" : q.monthLeft
+    }
 
 💳 اشتراک: ${subActive ? "فعال ✅" : "غیرفعال ❌"}
 • انقضا: ${subActive ? fmtDateIso(u.subscription.expiresAt, env.TZ) : "-"}
 
 🏦 ولت عمومی: ${wallet ?? "تنظیم نشده"}
 `;
-    await safeReply(ctx, txt, { reply_markup: mainMenuReplyKb() });
-  }
-
-  async function showSupport(ctx: MyContext) {
-    await safeReply(
-      ctx,
-      "🆘 پشتیبانی: پیام خود را ارسال کنید تا به ادمین‌ها فوروارد شود.\n📚 آموزش: به‌زودی ...",
-      { reply_markup: mainMenuReplyKb() }
-    );
-  }
-
-  async function redeemPoints(ctx: MyContext) {
-    const u = requireUser(ctx);
-    const need = parseIntSafe(env.REDEEM_POINTS, 500);
-    const days = parseIntSafe(env.REDEEM_DAYS, 30);
-
-    if (u.points < need) {
-      await safeReply(
-        ctx,
-        `امتیاز کافی نیست.
-نیاز: ${need}
-امتیاز شما: ${u.points}`,
-        { reply_markup: mainMenuReplyKb() }
-      );
-      return;
-    }
-
-    u.points -= need;
-    const now = Date.now();
-    const base =
-      u.subscription.expiresAt && Date.parse(u.subscription.expiresAt) > now
-        ? Date.parse(u.subscription.expiresAt)
-        : now;
-    const expires = new Date(base + days * 24 * 3600 * 1000).toISOString();
-    u.subscription.active = true;
-    u.subscription.expiresAt = expires;
-    await putUser(env, u);
-
-    await safeReply(
-      ctx,
-      `✅ اشتراک رایگان فعال شد.
-انقضا: ${fmtDateIso(expires, env.TZ)}`,
-      { reply_markup: mainMenuReplyKb() }
-    );
-  }
-
-  async function showWallet(ctx: MyContext) {
-    const wallet = await getPublicWallet(env);
-    await safeReply(
-      ctx,
-      wallet ? `🏦 آدرس ولت عمومی:\n${wallet}` : "❌ هنوز ولت عمومی تنظیم نشده است.",
-      { reply_markup: mainMenuReplyKb() }
-    );
-  }
-
-  async function showRef(ctx: MyContext) {
-    const u = requireUser(ctx);
-    const linkBase = `https://t.me/${(bot.botInfo as any)?.username ?? "YOUR_BOT"}?start=`;
-    const codes = u.refCodes.map((c, i) => `${i + 1}) ${linkBase}${c}`).join("\n");
-
-    const kb = new InlineKeyboard()
-      .text("🎁 تبدیل امتیاز", "ref:redeem")
-      .row()
-      .text("⬅️ منو", "menu:home");
-
-    await safeReply(
-      ctx,
-      `🎁 رفرال شما:
-${codes}
-
-دعوت موفق: ${u.successfulInvites}
-امتیاز: ${u.points}
-
-برای تبدیل امتیاز، از دکمه زیر استفاده کن.`,
-      { disable_web_page_preview: true, reply_markup: kb }
-    );
-  }
-
-  async function startLevelFlow(ctx: MyContext) {
-    const u = requireUser(ctx);
-    await setState(env, u.id, { flow: "level", step: "q1", data: { answers: [] } });
-    await safeReply(ctx, "🧠 آزمون تعیین سطح شروع شد.\nسوال 1/6: هدف اصلی شما از ترید چیست؟ (کوتاه پاسخ بده)");
-  }
-
-  // middleware: attach env + user
-  bot.use(async (ctx, next) => {
-    ctx.env = env;
-    if (ctx.from) {
-      ctx.user = await ensureUser(env, {
-        id: ctx.from.id,
-        username: ctx.from.username,
-        firstName: ctx.from.first_name,
-      });
-    }
-    await next();
+    await ctx.reply(txt, { reply_markup: mainMenuKb() });
   });
 
-  bot.catch(async (err) => {
-    console.log("BOT ERROR", err.error);
-    try {
-      await safeReply(err.ctx, "❌ خطای داخلی رخ داد. لطفاً دوباره تلاش کنید یا /support را بزنید.");
-    } catch { }
-  });
-
-  // Commands
-  bot.command(["start", "menu"], async (ctx) => {
+  async function showBuy(ctx: MyContext) {
     const u = requireUser(ctx);
-
-    // referral: /start CODE
-    const text = ctx.message?.text ?? "";
-    const code = text.split(" ")[1]?.trim();
-    if (code) {
-      const referrerId = await getReferrerByCode(env, code);
-      if (referrerId && referrerId !== u.id && !u.referrerId) {
-        u.referrerId = referrerId;
-        await putUser(env, u);
-      }
-    }
-
-    if (!u.name) {
-      await setState(env, u.id, { flow: "onboarding", step: "ask_name" });
-      await safeReply(ctx, "👤 لطفاً نام خود را ارسال کنید:");
-      return;
-    }
-
-    if (!u.phone) {
-      await setState(env, u.id, { flow: "onboarding", step: "ask_contact" });
-      const kb = new Keyboard().requestContact("📞 ارسال شماره (Share Contact)").resized().oneTime();
-      await safeReply(ctx, "📞 برای ادامه، لطفاً شماره خود را Share کنید:", { reply_markup: kb });
-      return;
-    }
-
-    await showMenu(ctx, env);
-  });
-
-  bot.command("signals", async (ctx) => startSignalsFlow(ctx));
-  bot.command("settings", async (ctx) => showSettings(ctx));
-
-  bot.command("profile", async (ctx) => {
-    await showProfile(ctx);
-  });
-
-  async function showBuy(ctx: any, env: Env) {
     const plans = await getPlans(env);
     const wallet = await getPublicWallet(env);
 
     const kb = new InlineKeyboard();
+    const selected = u.settings.selectedPlanId;
+
     for (const p of plans) {
-      kb.text(`${p.title} • ${p.priceUsdt} USDT`, `plan:${p.id}`).row();
+      const prefix = selected === p.id ? "✅ " : "";
+      kb.text(`${prefix}${p.title} • ${p.priceUsdt} USDT`, `plan:${p.id}`).row();
     }
+
+    kb.text("🔄 رفرش پلن‌ها", "planlist").row();
     kb.url("💬 پشتیبانی", "https://t.me/").row();
-    kb.text("🔄 رفرش پلن‌ها", "planlist");
+    kb.text("⬅️ منو", "menu:home");
 
     const w = wallet ? `<code>${wallet}</code>` : "هنوز تنظیم نشده";
     const text =
@@ -426,26 +337,34 @@ ${codes}
       `۳) بعد از پرداخت، TxID را ارسال کن:\n<code>/tx YOUR_TXID</code>\n\n` +
       `اگر پلن انتخاب کردی، نیاز نیست PLAN_ID بفرستی.`;
 
-    await safeReply(ctx, text, { parse_mode: "HTML", reply_markup: kb, disable_web_page_preview: true });
+    await ctx.reply(text, {
+      parse_mode: "HTML",
+      reply_markup: kb,
+      disable_web_page_preview: true,
+    });
   }
 
-  bot.command("buy", async (ctx) => showBuy(ctx, env));
-  bot.command("pay", async (ctx) => showBuy(ctx, env));
+  bot.command(["buy", "pay"], async (ctx) => showBuy(ctx as MyContext));
 
   bot.command("tx", async (ctx) => {
     const u = requireUser(ctx);
-    const parts = (ctx.message?.text ?? "").trim().split(/\s+/).slice(1);
+    const parts = (ctx.message?.text ?? "")
+      .trim()
+      .split(/\s+/)
+      .slice(1);
     const txid = (parts[0] || "").trim();
-    const planId = (parts[1] || "").trim();
+    const planIdArg = (parts[1] || "").trim();
+    const planId = planIdArg || u.settings.selectedPlanId || "";
 
     if (!txid || !isValidTxid(txid)) {
-      await safeReply(ctx, `فرمت TxID معتبر نیست. مثال:\n/tx 0xabc123...`);
+      await ctx.reply(`فرمت TxID معتبر نیست. مثال:
+/tx 0xabc123...`);
       return;
     }
 
     const exists = await getPayment(env, txid);
     if (exists) {
-      await safeReply(ctx, "این TxID قبلاً ثبت شده است.");
+      await ctx.reply("این TxID قبلاً ثبت شده است.");
       return;
     }
 
@@ -461,201 +380,267 @@ ${codes}
       amountUsdt: chosen ? chosen.priceUsdt : parseFloatSafe(env.SUB_PRICE_USDT, 29),
       planDays: chosen ? chosen.durationDays : parseIntSafe(env.SUB_DURATION_DAYS, 30),
     };
+
     await putPayment(env, p);
 
-    await safeReply(ctx, "✅ TxID ثبت شد. پس از بررسی ادمین، به شما اطلاع داده می‌شود.");
+    await ctx.reply("✅ TxID ثبت شد. پس از بررسی ادمین، به شما اطلاع داده می‌شود.");
 
+    // notify admins with inline buttons
     const kb = new InlineKeyboard()
       .text("✅ Approve", `pay:approve:${txid}`)
       .text("❌ Reject", `pay:reject:${txid}`);
 
-    await notifyAdmins(env, bot, `💳 پرداخت جدید (PENDING)\nUser: ${u.id}\nTxID: ${txid}`);
+    await notifyAdmins(
+      env,
+      bot,
+      `💳 پرداخت جدید (PENDING)
+User: ${u.id}
+TxID: ${txid}`
+    );
 
-    const ids = (env.ADMIN_IDS ?? "").split(",").map(s => s.trim()).filter(Boolean).map(Number);
+    const ids = (env.ADMIN_IDS ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map(Number);
     const owner = env.OWNER_ID ? Number(env.OWNER_ID) : undefined;
     const targets = new Set<number>(ids);
     if (owner) targets.add(owner);
 
     for (const id of targets) {
-      try { await bot.api.sendMessage(id, `برای بررسی: ${txid}`, { reply_markup: kb }); } catch { }
+      try {
+        await bot.api.sendMessage(id, `برای بررسی: ${txid}`, {
+          reply_markup: kb,
+        });
+      } catch {}
     }
   });
 
-  bot.command("wallet", async (ctx) => showWallet(ctx));
-  bot.command("level", async (ctx) => startLevelFlow(ctx));
+  bot.command("wallet", async (ctx) => {
+    const wallet = await getPublicWallet(env);
+    await ctx.reply(
+      wallet ? `🏦 آدرس ولت عمومی:\n${wallet}` : "❌ هنوز ولت عمومی تنظیم نشده است."
+    );
+  });
+
+  bot.command("level", async (ctx) => {
+    const u = requireUser(ctx);
+    await setState(env, u.id, { flow: "level", step: "q1", data: { answers: [] } });
+    await ctx.reply(
+      "🧠 آزمون تعیین سطح شروع شد.\nسوال 1/6: هدف اصلی شما از ترید چیست؟ (کوتاه پاسخ بده)"
+    );
+  });
 
   bot.command("customprompt", async (ctx) => {
     const u = requireUser(ctx);
     await setState(env, u.id, { flow: "customprompt", step: "await_text" });
-    await safeReply(ctx, "✍️ لطفاً استراتژی/روش خود را به صورت متن ارسال کنید. سیستم برای شما یک پرامپت اختصاصی می‌سازد و ۲ ساعت بعد ارسال می‌کند.");
+    await ctx.reply(
+      "✍️ لطفاً استراتژی/روش خود را به صورت متن ارسال کنید. سیستم برای شما یک پرامپت اختصاصی می‌سازد و ۲ ساعت بعد ارسال می‌کند."
+    );
   });
 
-  bot.command("ref", async (ctx) => showRef(ctx));
-  bot.command("redeem", async (ctx) => redeemPoints(ctx));
-  bot.command(["support", "education"], async (ctx) => showSupport(ctx));
+  bot.command("ref", async (ctx) => {
+    const u = requireUser(ctx);
+    const linkBase = `https://t.me/${(bot.botInfo as any)?.username ?? "YOUR_BOT"}?start=`;
+    const codes = u.refCodes.map((c, i) => `${i + 1}) ${linkBase}${c}`).join("\n");
+
+    await ctx.reply(
+      `🎁 رفرال شما:
+${codes}
+
+دعوت موفق: ${u.successfulInvites}
+امتیاز: ${u.points}
+
+برای تبدیل امتیاز: /redeem`,
+      { disable_web_page_preview: true }
+    );
+  });
+
+  bot.command("redeem", async (ctx) => {
+    const u = requireUser(ctx);
+    const need = parseIntSafe(env.REDEEM_POINTS, 500);
+    const days = parseIntSafe(env.REDEEM_DAYS, 30);
+
+    if (u.points < need) {
+      await ctx.reply(`امتیاز کافی نیست.
+نیاز: ${need}
+امتیاز شما: ${u.points}`);
+      return;
+    }
+
+    u.points -= need;
+
+    const now = Date.now();
+    const base =
+      u.subscription.expiresAt && Date.parse(u.subscription.expiresAt) > now
+        ? Date.parse(u.subscription.expiresAt)
+        : now;
+    const expires = new Date(base + days * 24 * 3600 * 1000).toISOString();
+
+    u.subscription.active = true;
+    u.subscription.expiresAt = expires;
+
+    await putUser(env, u);
+    await ctx.reply(`✅ اشتراک رایگان فعال شد.
+انقضا: ${fmtDateIso(expires, env.TZ)}`);
+  });
+
+  bot.command(["support", "education"], async (ctx) => {
+    await ctx.reply(
+      "🆘 پشتیبانی: پیام خود را ارسال کنید تا به ادمین‌ها فوروارد شود.\n📚 آموزش: به‌زودی ...",
+      { reply_markup: mainMenuKb() }
+    );
+  });
 
   bot.command("payments", async (ctx) => {
     const u = requireUser(ctx);
-    if (!isAdmin(u, env)) return safeReply(ctx, "دسترسی ندارید.");
+    if (!isAdmin(u, env)) return ctx.reply("دسترسی ندارید.");
     const pending = await listPayments(env, "PENDING");
-    if (!pending.length) return safeReply(ctx, "پرداخت در انتظار نداریم.");
-    const text = pending.slice(0, 15).map((p) => `• ${p.txid} | user ${p.userId} | ${p.createdAt}`).join("\n");
-    await safeReply(ctx, `لیست پرداخت‌های در انتظار:\n${text}`);
+    if (!pending.length) return ctx.reply("پرداخت در انتظار نداریم.");
+    const text = pending
+      .slice(0, 15)
+      .map((p) => `• ${p.txid} | user ${p.userId} | ${p.createdAt}`)
+      .join("\n");
+    await ctx.reply(`لیست پرداخت‌های در انتظار:\n${text}`);
   });
 
   bot.command("approve", async (ctx) => {
     const u = requireUser(ctx);
-    if (!isAdmin(u, env)) return safeReply(ctx, "دسترسی ندارید.");
+    if (!isAdmin(u, env)) return ctx.reply("دسترسی ندارید.");
     const parts = (ctx.message?.text ?? "").trim().split(/\s+/).slice(1);
     const txid = (parts[0] || "").trim();
-    await approvePayment(bot, env, u.id, txid, true, ctx);
+    await approvePayment(bot, env, u.id, txid, true, ctx as any);
   });
 
   bot.command("reject", async (ctx) => {
     const u = requireUser(ctx);
-    if (!isAdmin(u, env)) return safeReply(ctx, "دسترسی ندارید.");
+    if (!isAdmin(u, env)) return ctx.reply("دسترسی ندارید.");
     const parts = (ctx.message?.text ?? "").trim().split(/\s+/).slice(1);
     const txid = (parts[0] || "").trim();
-    await approvePayment(bot, env, u.id, txid, false, ctx);
+    await approvePayment(bot, env, u.id, txid, false, ctx as any);
   });
 
   bot.command("setwallet", async (ctx) => {
     const u = requireUser(ctx);
-    if (!isAdmin(u, env)) return safeReply(ctx, "دسترسی ندارید.");
+    if (!isAdmin(u, env)) return ctx.reply("دسترسی ندارید.");
     const addr = (ctx.message?.text ?? "").split(" ").slice(1).join(" ").trim();
-    if (!addr) return safeReply(ctx, "مثال: /setwallet WALLET_ADDRESS");
+    if (!addr) return ctx.reply("مثال: /setwallet WALLET_ADDRESS");
     await setPublicWallet(env, addr);
-    await safeReply(ctx, "✅ ولت عمومی ذخیره شد.");
+    await ctx.reply("✅ ولت عمومی ذخیره شد.");
 
     const ownerId = env.OWNER_ID ? Number(env.OWNER_ID) : undefined;
     if (ownerId) {
       try {
-        await bot.api.sendMessage(ownerId, `⚠️ آدرس ولت عمومی تغییر کرد:\n${addr}`);
-      } catch { }
+        await bot.api.sendMessage(
+          ownerId,
+          `⚠️ آدرس ولت عمومی تغییر کرد:
+${addr}`
+        );
+      } catch {}
     }
   });
 
   bot.command("setfreelimit", async (ctx) => {
     const u = requireUser(ctx);
-    if (!isAdmin(u, env)) return safeReply(ctx, "دسترسی ندارید.");
+    if (!isAdmin(u, env)) return ctx.reply("دسترسی ندارید.");
     const n = Number((ctx.message?.text ?? "").split(" ")[1]);
-    if (!Number.isFinite(n) || n <= 0) return safeReply(ctx, "مثال: /setfreelimit 50");
+    if (!Number.isFinite(n) || n <= 0) return ctx.reply("مثال: /setfreelimit 50");
     await env.USERS_KV.put("config:free_daily_limit", String(n));
-    await safeReply(ctx, "✅ ثبت شد (برای اعمال کامل، این نسخه نیاز دارد شما مقدار env را نیز sync کنید).");
+    await ctx.reply(
+      "✅ ثبت شد (برای اعمال کامل، این نسخه نیاز دارد شما مقدار env را نیز sync کنید)."
+    );
   });
 
   bot.command("setsublimit", async (ctx) => {
     const u = requireUser(ctx);
-    if (!isAdmin(u, env)) return safeReply(ctx, "دسترسی ندارید.");
+    if (!isAdmin(u, env)) return ctx.reply("دسترسی ندارید.");
     const n = Number((ctx.message?.text ?? "").split(" ")[1]);
-    if (!Number.isFinite(n) || n <= 0) return safeReply(ctx, "مثال: /setsublimit 50");
+    if (!Number.isFinite(n) || n <= 0) return ctx.reply("مثال: /setsublimit 50");
     await env.USERS_KV.put("config:sub_daily_limit", String(n));
-    await safeReply(ctx, "✅ ثبت شد (برای اعمال کامل، این نسخه نیاز دارد شما مقدار env را نیز sync کنید).");
+    await ctx.reply(
+      "✅ ثبت شد (برای اعمال کامل، این نسخه نیاز دارد شما مقدار env را نیز sync کنید)."
+    );
   });
 
   bot.command("admin", async (ctx) => {
     const u = requireUser(ctx);
-    if (!isAdmin(u, env)) return safeReply(ctx, "دسترسی ندارید.");
-    await safeReply(ctx, `🔧 Admin Panel:
+    if (!isAdmin(u, env)) return ctx.reply("دسترسی ندارید.");
+    await ctx.reply(`🔧 Admin Panel:
 ${ctx.me.username ? `https://<YOUR_WORKER_URL>/admin` : "/admin"}
 توکن: ${env.ADMIN_PANEL_TOKEN}`);
   });
 
-  // Callback queries
+  // Callback queries (menus/actions)
   bot.on("callback_query:data", async (ctx) => {
     const u = requireUser(ctx);
     const data = ctx.callbackQuery.data;
 
-    // Plan selection
-    if (data.startsWith("plan:")) {
-      const planId = data.slice("plan:".length);
-      await setSelectedPlan(env, ctx.from!.id, planId);
-      await ctx.answerCallbackQuery({ text: "✅ پلن انتخاب شد" });
-
-      const wallet = await getPublicWallet(env);
-      const w = wallet ? `<code>${wallet}</code>` : "هنوز تنظیم نشده";
-
-      const kb = new InlineKeyboard()
-        .text("✅ پرداخت کردم", "paydone")
-        .row()
-        .text("🔙 برگشت به پلن‌ها", "planlist");
-
-      await safeEdit(
-        ctx,
-        `✅ پلن انتخاب شد: <code>${planId}</code>\n\n` +
-        `۱) به آدرس ولت زیر USDT (BEP20) واریز کن:\n${w}\n\n` +
-        `۲) بعد از پرداخت روی «پرداخت کردم» بزن یا TxID را ارسال کن:\n<code>/tx YOUR_TXID</code>`,
-        { parse_mode: "HTML", reply_markup: kb, disable_web_page_preview: true }
-      );
+    // Menu
+    if (data === "menu:home") {
+      await ctx.answerCallbackQuery();
+      await showMenu(ctx as any);
       return;
     }
-
-    if (data === "paydone") {
-      await ctx.answerCallbackQuery({ text: "TxID را ارسال کن" });
-      await safeReply(
-        ctx,
-        `✅ عالی! حالا TxID پرداخت را ارسال کن:\n<code>/tx YOUR_TXID</code>\n\n` +
-        `اگر TxID را کپی کردی، فقط جایگزین کن و بفرست.`,
-        { parse_mode: "HTML" }
-      );
+    if (data === "menu:signals") {
+      await ctx.answerCallbackQuery();
+      await ctx.api.sendMessage(u.id, "/signals");
+      return;
+    }
+    if (data === "menu:settings") {
+      await ctx.answerCallbackQuery();
+      await ctx.reply(settingsText(u), { reply_markup: settingsKb(u) });
+      return;
+    }
+    if (data === "menu:profile") {
+      await ctx.answerCallbackQuery();
+      await ctx.api.sendMessage(u.id, "/profile");
+      return;
+    }
+    if (data === "menu:buy") {
+      await ctx.answerCallbackQuery();
+      await ctx.api.sendMessage(u.id, "/buy");
+      return;
+    }
+    if (data === "menu:ref") {
+      await ctx.answerCallbackQuery();
+      await ctx.api.sendMessage(u.id, "/ref");
+      return;
+    }
+    if (data === "menu:level") {
+      await ctx.answerCallbackQuery();
+      await ctx.api.sendMessage(u.id, "/level");
+      return;
+    }
+    if (data === "menu:support") {
+      await ctx.answerCallbackQuery();
+      await ctx.api.sendMessage(u.id, "/support");
+      return;
+    }
+    if (data === "menu:education") {
+      await ctx.answerCallbackQuery();
+      await ctx.api.sendMessage(u.id, "/education");
       return;
     }
 
     if (data === "planlist") {
       await ctx.answerCallbackQuery();
-      await showBuy(ctx, env);
+      await showBuy(ctx as any);
       return;
     }
 
-    // Menu
-    if (data === "menu:home") {
+    if (data.startsWith("plan:")) {
       await ctx.answerCallbackQuery();
-      await showMenu(ctx, env);
+      const planId = data.split(":")[1];
+      await setSelectedPlan(env, u.id, planId);
+      await ctx.reply(
+        `✅ پلن انتخاب شد: ${planId}\nاکنون می‌توانید TxID را ارسال کنید:\n/tx YOUR_TXID`
+      );
       return;
     }
-    if (data === "menu:signals") {
-      await ctx.answerCallbackQuery();
-      await startSignalsFlow(ctx);
-      return;
-    }
-    if (data === "menu:settings") {
-      await ctx.answerCallbackQuery();
-      await showSettings(ctx);
-      return;
-    }
-    if (data === "menu:profile") {
-      await ctx.answerCallbackQuery();
-      await showProfile(ctx);
-      return;
-    }
-    if (data === "menu:buy") {
-      await ctx.answerCallbackQuery();
-      await showBuy(ctx, env);
-      return;
-    }
-    if (data === "menu:wallet") {
-      await ctx.answerCallbackQuery();
-      await showWallet(ctx);
-      return;
-    }
-    if (data === "menu:ref") {
-      await ctx.answerCallbackQuery();
-      await showRef(ctx);
-      return;
-    }
-    if (data === "menu:level") {
-      await ctx.answerCallbackQuery();
-      await startLevelFlow(ctx);
-      return;
-    }
-    if (data === "menu:support" || data === "menu:education") {
-      await ctx.answerCallbackQuery();
-      await showSupport(ctx);
-      return;
-    }
+
     if (data === "menu:app") {
       await ctx.answerCallbackQuery();
-      await safeReply(ctx, "📱 برای باز کردن Mini App روی دکمه زیر بزن:", {
+      await ctx.reply("📱 برای باز کردن Mini App روی دکمه زیر بزن:", {
         reply_markup: new InlineKeyboard()
           .webApp("Open Mini App", env.PUBLIC_APP_PATH || "/app")
           .row()
@@ -672,14 +657,18 @@ ${ctx.me.username ? `https://<YOUR_WORKER_URL>/admin` : "/admin"}
       if (key === "risk") u.settings.risk = val as Risk;
       if (key === "style") {
         if (val === "CUSTOM" && !u.customPrompt?.ready) {
-          await safeReply(ctx, "❌ پرامپت اختصاصی هنوز آماده نیست. ابتدا /customprompt را انجام دهید.");
+          await ctx.reply(
+            "❌ پرامپت اختصاصی هنوز آماده نیست. ابتدا /customprompt را انجام دهید."
+          );
           return;
         }
         u.settings.style = val as Style;
       }
       if (key === "news") u.settings.news = val as any;
       await putUser(env, u);
-      await safeReply(ctx, `✅ ذخیره شد.\n${settingsText(u)}`, { reply_markup: settingsKb(u) });
+      await ctx.reply(`✅ ذخیره شد.\n${settingsText(u)}`, {
+        reply_markup: settingsKb(u),
+      });
       return;
     }
 
@@ -687,99 +676,97 @@ ${ctx.me.username ? `https://<YOUR_WORKER_URL>/admin` : "/admin"}
     if (data.startsWith("sig:market:")) {
       await ctx.answerCallbackQuery();
       const market = data.split(":")[2] as Market;
-      await setState(env, u.id, { flow: "signals", step: "ask_symbol", data: { market } });
-
-      await safeReply(
-        ctx,
-        `مرحله ۲/۲: نماد را ارسال کن (مثلاً BTCUSDT یا BTC-USD یا EURUSD=X)
-بازار: ${toMarketLabel(market)}`
-      );
+      await setState(env, u.id, {
+        flow: "signals",
+        step: "ask_symbol",
+        data: { market },
+      });
+      await ctx.reply(`نماد را ارسال کن (مثلاً BTCUSDT یا BTC-USD یا EURUSD=X)
+بازار: ${toMarketLabel(market)}`);
       return;
     }
 
-    // Payments via buttons
+    // Payments approval via buttons
     if (data.startsWith("pay:")) {
       await ctx.answerCallbackQuery();
-      if (!isAdmin(u, env)) return safeReply(ctx, "دسترسی ندارید.");
+      if (!isAdmin(u, env)) return ctx.reply("دسترسی ندارید.");
       const [, action, txid] = data.split(":");
-      await approvePayment(bot, env, u.id, txid, action === "approve", ctx);
-      return;
-    }
-
-    if (data === "ref:redeem") {
-      await ctx.answerCallbackQuery();
-      await redeemPoints(ctx);
+      await approvePayment(bot, env, u.id, txid, action === "approve", ctx as any);
       return;
     }
   });
 
-  // Messages: onboarding + flows
+  // Messages: onboarding, flows
   bot.on("message", async (ctx) => {
     const u = requireUser(ctx);
 
-    // Contact handler (onboarding)
+    // Contact handler (onboarding) - Codex priority
     if (ctx.message?.contact) {
       const st = await getState(env, u.id);
-      if (st?.flow === "onboarding" && st.step === "ask_contact") {
+      if (!u.phone || (st?.flow === "onboarding" && st.step === "ask_contact")) {
         const phone = ctx.message.contact.phone_number;
-        const r = await (await import("./lib/storage")).setUserPhone(env, u.id, phone);
+        const r = await (await import("./lib/storage")).setUserPhone(
+          env,
+          u.id,
+          phone,
+          { force: true }
+        );
         if (!r.ok) {
-          await safeReply(ctx, r.reason || "خطا در ذخیره شماره");
+          await ctx.reply(r.reason || "خطا در ذخیره شماره");
           return;
         }
 
+        u.phone = phone;
+
+        if (r.existingUserId && r.existingUserId !== u.id) {
+          await notifyAdmins(
+            env,
+            bot,
+            `⚠️ شماره تلفن دوباره ثبت شد و به این کاربر منتقل شد.
+Phone: ${phone}
+New User: ${u.id}
+Old User: ${r.existingUserId}`
+          );
+          await ctx.reply(
+            "✅ شماره قبلاً ثبت شده بود؛ شماره به حساب شما منتقل شد و آنبوردینگ ادامه پیدا می‌کند."
+          );
+        }
+
+        if (u.onboardingComplete) {
+          await setState(env, u.id, null);
+          await showMenu(ctx as any);
+          return;
+        }
+
+        // next
         await setState(env, u.id, { flow: "onboarding", step: "ask_experience" });
         const kb = new InlineKeyboard()
           .text("مبتدی", "ob:exp:BEGINNER")
           .text("متوسط", "ob:exp:INTERMEDIATE")
           .text("حرفه‌ای", "ob:exp:PRO");
-        await safeReply(ctx, "تجربه شما در بازار؟", { reply_markup: kb });
+        await ctx.reply("تجربه شما در بازار؟", { reply_markup: kb });
         return;
       }
     }
 
     const st = await getState(env, u.id);
 
-    // Menu buttons (reply keyboard)
-    if (!st && ctx.message?.text && !ctx.message.text.startsWith("/")) {
-      const t = ctx.message.text.trim();
-      const map: Record<string, () => Promise<void>> = {
-        "📈 تحلیل/سیگنال": () => startSignalsFlow(ctx),
-        "⚙️ تنظیمات": () => showSettings(ctx),
-        "👤 پروفایل": () => showProfile(ctx),
-        "💳 خرید اشتراک": () => showBuy(ctx, env),
-        "🏦 ولت": () => showWallet(ctx),
-        "🎁 رفرال": () => showRef(ctx),
-        "🧠 تعیین سطح": () => startLevelFlow(ctx),
-        "🆘 پشتیبانی": () => showSupport(ctx),
-        "📚 آموزش": () => showSupport(ctx),
-        "📱 Mini App": async () => {
-          await safeReply(ctx, "📱 برای باز کردن Mini App روی دکمه زیر بزن:", {
-            reply_markup: new InlineKeyboard().webApp("Open Mini App", env.PUBLIC_APP_PATH || "/app"),
-          });
-        },
-      };
-      const action = map[t];
-      if (action) {
-        await action();
-        return;
-      }
-    }
-
-    // Onboarding: name
+    // Onboarding steps expecting text
     if (st?.flow === "onboarding" && st.step === "ask_name") {
       const name = (ctx.message?.text ?? "").trim();
-      if (name.length < 2) return safeReply(ctx, "نام نامعتبر است. دوباره ارسال کنید.");
+      if (name.length < 2) return ctx.reply("نام نامعتبر است. دوباره ارسال کنید.");
       u.name = name;
       await putUser(env, u);
-
       await setState(env, u.id, { flow: "onboarding", step: "ask_contact" });
-      const kb = new Keyboard().requestContact("📞 ارسال شماره (Share Contact)").resized().oneTime();
-      await safeReply(ctx, "📞 لطفاً شماره خود را Share کنید:", { reply_markup: kb });
+      const kb = new Keyboard()
+        .requestContact("📞 ارسال شماره (Share Contact)")
+        .resized()
+        .oneTime();
+      await ctx.reply("📞 لطفاً شماره خود را Share کنید:", { reply_markup: kb });
       return;
     }
 
-    // Leveling flow (text answers)
+    // Leveling flow
     if (st?.flow === "level" && ctx.message?.text) {
       const ans = ctx.message.text.trim();
       const qMap: Record<string, string> = {
@@ -798,12 +785,13 @@ ${ctx.me.username ? `https://<YOUR_WORKER_URL>/admin` : "/admin"}
       if (idx < 6) {
         const next = `q${idx + 1}`;
         await setState(env, u.id, { ...st, step: next, data: st.data });
-        await safeReply(ctx, qMap[next]);
+        await ctx.reply(qMap[next]);
         return;
       }
 
+      // analyze result with AI
       await setState(env, u.id, null);
-      await safeReply(ctx, "در حال تحلیل پاسخ‌ها...");
+      await ctx.reply("در حال تحلیل پاسخ‌ها...");
 
       const prompt = `تو یک مربی ترید هستی. بر اساس پاسخ‌های کاربر سطح او را تعیین کن.
 خروجی دقیقاً شامل دو بخش باشد:
@@ -814,7 +802,6 @@ ${ctx.me.username ? `https://<YOUR_WORKER_URL>/admin` : "/admin"}
 پاسخ‌ها:
 ${JSON.stringify(st.data.answers, null, 2)}
 `;
-
       try {
         const out = await callAI(env, prompt, { temperature: 0.2 });
         const j = extractJsonBlock(out);
@@ -828,9 +815,9 @@ ${JSON.stringify(st.data.answers, null, 2)}
           };
           await putUser(env, u);
         }
-        await safeReply(ctx, out);
-      } catch {
-        await safeReply(ctx, "❌ خطا در تحلیل سطح. لطفاً دوباره تلاش کنید.");
+        await ctx.reply(out);
+      } catch (e: any) {
+        await ctx.reply("❌ خطا در تحلیل سطح. لطفاً دوباره تلاش کنید.");
       }
       return;
     }
@@ -838,13 +825,11 @@ ${JSON.stringify(st.data.answers, null, 2)}
     // Custom prompt flow
     if (st?.flow === "customprompt" && st.step === "await_text" && ctx.message?.text) {
       const strategy = ctx.message.text.trim();
-      if (strategy.length < 20) {
-        await safeReply(ctx, "متن کوتاه است. لطفاً جزئیات بیشتری بفرستید (حداقل ۲۰ کاراکتر).");
-        return;
-      }
+      if (strategy.length < 20)
+        return ctx.reply("متن کوتاه است. لطفاً جزئیات بیشتری بفرستید (حداقل ۲۰ کاراکتر).");
 
       await setState(env, u.id, null);
-      await safeReply(ctx, "در حال ساخت پرامپت اختصاصی...");
+      await ctx.reply("در حال ساخت پرامپت اختصاصی...");
 
       const prompt = `تو متخصص مهندسی پرامپت و ترید هستی.
 از روی متن استراتژی زیر، یک پرامپت اختصاصی بساز که:
@@ -856,16 +841,16 @@ ${JSON.stringify(st.data.answers, null, 2)}
 استراتژی کاربر:
 ${strategy}
 `;
-
       try {
         const generated = await callAI(env, prompt, { temperature: 0.3 });
         const due = new Date(Date.now() + 2 * 3600 * 1000).toISOString();
         await putCustomPromptTask(env, u.id, due, generated);
         u.customPrompt = { ready: false, text: generated, generatedAt: nowIso() };
         await putUser(env, u);
-        await safeReply(ctx, "✅ پرامپت شما ساخته شد و ۲ ساعت دیگر ارسال می‌شود.");
+
+        await ctx.reply("✅ پرامپت شما ساخته شد و ۲ ساعت دیگر ارسال می‌شود.");
       } catch {
-        await safeReply(ctx, "❌ خطا در ساخت پرامپت. دوباره تلاش کنید.");
+        await ctx.reply("❌ خطا در ساخت پرامپت. دوباره تلاش کنید.");
       }
       return;
     }
@@ -874,11 +859,39 @@ ${strategy}
     if (st?.flow === "signals" && st.step === "ask_symbol" && ctx.message?.text) {
       const symbol = ctx.message.text.trim();
       const market = st.data?.market as Market;
-
       await setState(env, u.id, null);
-      await safeReply(ctx, "⏳ در حال گرفتن دیتا و ساخت تحلیل...");
+      await ctx.reply("⏳ در حال گرفتن دیتا و ساخت تحلیل...");
 
       try {
+        if (u.settings.style === "CUSTOM" && !u.customPrompt?.ready) {
+          await ctx.reply("❌ پرامپت اختصاصی هنوز آماده نیست. ابتدا /customprompt را انجام دهید.");
+          return;
+        }
+
+        if (env.JOBS) {
+          const job: Job = {
+            type: "SIGNAL_ANALYSIS",
+            jobId: newJobId("signal"),
+            chatId: u.id,
+            userId: u.id,
+            market,
+            symbol,
+            timeframe: u.settings.timeframe,
+            style: u.settings.style,
+            risk: u.settings.risk,
+            news: u.settings.news === "ON",
+          };
+          await enqueue(env, job);
+          await ctx.reply("📨 درخواست شما به صف پردازش ارسال شد. نتیجه به‌زودی ارسال می‌شود.");
+          return;
+        }
+
+        const r = await consume(env, u, 1);
+        if (!r.ok) {
+          await ctx.reply(`${r.reason}\nبرای مشاهده سهمیه: /profile`);
+          return;
+        }
+
         const candles = await fetchCandles(env, market, symbol, u.settings.timeframe, 200);
 
         const base = await getPromptBase(env);
@@ -927,24 +940,24 @@ ${candleSummary}
         const zones = normalizeZones(j?.zones);
         const chartUrl = zones.length ? quickChartUrl(symbol, candles, zones) : null;
 
-        await safeReply(ctx, out, { disable_web_page_preview: true });
-
+        await ctx.reply(out, { disable_web_page_preview: true });
         if (chartUrl) {
           await ctx.replyWithPhoto(chartUrl, { caption: "📌 چارت با زون‌ها" });
         } else {
-          await safeReply(ctx, "ℹ️ زون قابل استخراج نبود؛ برای چارت، خروجی JSON را دقیق‌تر تنظیم کنید.");
+          await ctx.reply("ℹ️ زون قابل استخراج نبود؛ برای چارت، خروجی JSON را دقیق‌تر تنظیم کنید.");
         }
       } catch (e: any) {
-        await safeReply(ctx, `❌ خطا: ${e?.message ?? "unknown"}\n(نماد/بازار را چک کن و دوباره تلاش کن)`);
+        await ctx.reply(`❌ خطا: ${e?.message ?? "unknown"}
+(نماد/بازار را چک کن و دوباره تلاش کن)`);
       }
       return;
     }
 
-    // Vision (photo)
+    // Vision: اگر کاربر عکس/چارت ارسال کند (بهترین تلاش)
     if (ctx.message?.photo?.length) {
       const r = await consume(env, u, 1);
       if (!r.ok) {
-        await safeReply(ctx, `${r.reason}\nبرای مشاهده سهمیه: /profile`);
+        await ctx.reply(`${r.reason}\nبرای مشاهده سهمیه: /profile`);
         return;
       }
 
@@ -959,7 +972,7 @@ ${candleSummary}
         const buf = await imgRes.arrayBuffer();
 
         if (buf.byteLength > 2_500_000) {
-          await safeReply(ctx, "⚠️ تصویر خیلی بزرگ است. لطفاً اسکرین‌شات کوچک‌تر ارسال کنید.");
+          await ctx.reply("⚠️ تصویر خیلی بزرگ است. لطفاً اسکرین‌شات کوچک‌تر ارسال کنید.");
           return;
         }
 
@@ -968,7 +981,7 @@ ${candleSummary}
         const dataUrl = `data:${mime};base64,${b64}`;
 
         const base = await getPromptBase(env);
-        const vision = await (await import("./lib/storage")).getPromptVision(env);
+        const vision = await getPromptVision(env);
         const stylePrompt =
           u.settings.style === "CUSTOM" && u.customPrompt?.ready && u.customPrompt.text
             ? u.customPrompt.text
@@ -990,26 +1003,35 @@ news=${u.settings.news}
 کاربر یک تصویر چارت ارسال کرده است. لطفاً تحلیل را بر اساس تصویر ارائه کن و در انتها بلوک JSON با zones بده.`;
 
         const out = await callAIWithImage(env, p, dataUrl, { temperature: 0.2 });
-        await safeReply(ctx, out, { disable_web_page_preview: true });
-      } catch {
-        await safeReply(ctx, "❌ خطا در تحلیل تصویری. (مدل باید Vision را پشتیبانی کند)");
+        await ctx.reply(out, { disable_web_page_preview: true });
+      } catch (e: any) {
+        await ctx.reply(
+          "❌ خطا در تحلیل تصویری. (اگر از OpenAI استفاده می‌کنید، مدل باید vision را پشتیبانی کند)"
+        );
       }
       return;
     }
 
-    // Support: forward to admins (fallback)
+    // Support: forward to admins
     if (ctx.message?.text?.startsWith("/")) return;
-
     if (ctx.message?.text) {
       const txt = ctx.message.text.trim();
       if (txt.length >= 3) {
-        await notifyAdmins(env, bot, `🆘 پیام کاربر\nUser: ${u.id}\n@${u.username ?? "-"}\n\n${txt}`);
-        await safeReply(ctx, "پیام شما برای پشتیبانی ارسال شد ✅");
+        await notifyAdmins(
+          env,
+          bot,
+          `🆘 پیام کاربر
+User: ${u.id}
+@${u.username ?? "-"}
+
+${txt}`
+        );
+        await ctx.reply("پیام شما برای پشتیبانی ارسال شد ✅");
       }
     }
   });
 
-  // onboarding callbacks
+  // onboarding callback queries
   bot.on("callback_query:data", async (ctx, next) => {
     const u = requireUser(ctx);
     const data = ctx.callbackQuery.data;
@@ -1019,15 +1041,16 @@ news=${u.settings.news}
       const exp = data.split(":")[2];
       u.experience = exp as any;
       await putUser(env, u);
-
       await setState(env, u.id, { flow: "onboarding", step: "ask_fav_market" });
+
       const kb = new InlineKeyboard()
         .text("CRYPTO", "ob:market:CRYPTO")
         .text("FOREX", "ob:market:FOREX")
         .row()
         .text("METALS", "ob:market:METALS")
         .text("STOCKS", "ob:market:STOCKS");
-      await safeReply(ctx, "بازار مورد علاقه‌ات کدام است؟", { reply_markup: kb });
+
+      await ctx.reply("بازار مورد علاقه‌ات کدام است؟", { reply_markup: kb });
       return;
     }
 
@@ -1035,17 +1058,21 @@ news=${u.settings.news}
       await ctx.answerCallbackQuery();
       const market = data.split(":")[2] as Market;
       u.favoriteMarket = market;
+      u.onboardingComplete = true;
       await putUser(env, u);
       await setState(env, u.id, null);
 
-      // referral credit
+      // Referral acceptance rule: only count referral when contact is shared AND phone is new (already enforced).
       if (u.referrerId) {
         const refUser = await getUser(env, u.referrerId);
         if (refUser) {
           refUser.successfulInvites += 1;
           const step = parseIntSafe(env.REF_COMMISSION_STEP_PCT, 4);
           const max = parseIntSafe(env.REF_COMMISSION_MAX_PCT, 20);
-          refUser.referralCommissionPct = Math.min(max, refUser.successfulInvites * step);
+          refUser.referralCommissionPct = Math.min(
+            max,
+            refUser.successfulInvites * step
+          );
 
           const pts = parseIntSafe(env.POINTS_PER_REF, 6);
           refUser.points += pts;
@@ -1054,8 +1081,8 @@ news=${u.settings.news}
         }
       }
 
-      await safeReply(ctx, "✅ آنبوردینگ تکمیل شد!");
-      await showMenu(ctx, env);
+      await ctx.reply("✅ آنبوردینگ تکمیل شد!");
+      await showMenu(ctx as any);
       return;
     }
 
@@ -1065,7 +1092,9 @@ news=${u.settings.news}
   return bot;
 }
 
-function summarizeCandles(candles: Array<{ t: number; o: number; h: number; l: number; c: number }>) {
+function summarizeCandles(
+  candles: Array<{ t: number; o: number; h: number; l: number; c: number }>
+) {
   const last = candles.slice(-60);
   const hi = Math.max(...last.map((c) => c.h));
   const lo = Math.min(...last.map((c) => c.l));
@@ -1087,17 +1116,16 @@ samples=[${candles
 function normalizeZones(zones: any): Zone[] {
   if (!Array.isArray(zones)) return [];
   const out: Zone[] = [];
-
   for (const z of zones) {
     const from = Number(z?.from);
     const to = Number(z?.to);
     if (!Number.isFinite(from) || !Number.isFinite(to)) continue;
-
     const typeRaw = String(z?.type ?? "other").toLowerCase();
-    const type = (["demand", "supply", "support", "resistance", "fvg", "ob"].includes(typeRaw)
-      ? typeRaw
-      : "other") as Zone["type"];
-
+    const type = (
+      ["demand", "supply", "support", "resistance", "fvg", "ob"].includes(typeRaw)
+        ? typeRaw
+        : "other"
+    ) as Zone["type"];
     out.push({
       type,
       from,
@@ -1105,7 +1133,6 @@ function normalizeZones(zones: any): Zone[] {
       label: z?.label ? String(z.label).slice(0, 18) : undefined,
     });
   }
-
   return out;
 }
 
@@ -1118,17 +1145,18 @@ async function approvePayment(
   ctx?: MyContext
 ) {
   if (!txid) {
-    if (ctx) await safeReply(ctx, "TxID را وارد کنید.");
+    if (ctx) await ctx.reply("TxID را وارد کنید.");
     return;
   }
 
   const p = await getPayment(env, txid);
   if (!p) {
-    if (ctx) await safeReply(ctx, "یافت نشد.");
+    if (ctx) await ctx.reply("یافت نشد.");
     return;
   }
+
   if (p.status !== "PENDING") {
-    if (ctx) await safeReply(ctx, "این پرداخت قبلاً بررسی شده است.");
+    if (ctx) await ctx.reply("این پرداخت قبلاً بررسی شده است.");
     return;
   }
 
@@ -1146,8 +1174,8 @@ async function approvePayment(
         user.subscription.expiresAt && Date.parse(user.subscription.expiresAt) > now
           ? Date.parse(user.subscription.expiresAt)
           : now;
-
       const expires = new Date(base + days * 24 * 3600 * 1000).toISOString();
+
       user.subscription.active = true;
       user.subscription.expiresAt = expires;
       user.subscription.lastTxId = txid;
@@ -1155,12 +1183,14 @@ async function approvePayment(
       user.points += parseIntSafe(env.POINTS_PER_SUB_PURCHASE, 1000);
 
       await putUser(env, user);
+
       try {
         await bot.api.sendMessage(
           user.id,
-          `✅ پرداخت تایید شد.\nاشتراک فعال شد تا: ${fmtDateIso(expires, env.TZ)}`
+          `✅ پرداخت تایید شد.
+اشتراک فعال شد تا: ${fmtDateIso(expires, env.TZ)}`
         );
-      } catch { }
+      } catch {}
 
       if (user.referrerId) {
         const ref = await getUser(env, user.referrerId);
@@ -1169,16 +1199,24 @@ async function approvePayment(
           ref.points += bonus;
           await putUser(env, ref);
           try {
-            await bot.api.sendMessage(ref.id, `🎉 یکی از دعوت‌شده‌های شما اشتراک خرید.\n+${bonus} امتیاز`);
-          } catch { }
+            await bot.api.sendMessage(
+              ref.id,
+              `🎉 یکی از دعوت‌شده‌های شما اشتراک خرید.
++${bonus} امتیاز`
+            );
+          } catch {}
         }
       }
     }
-    if (ctx) await safeReply(ctx, "✅ تایید شد.");
+
+    if (ctx) await ctx.reply("✅ تایید شد.");
   } else {
     try {
-      await bot.api.sendMessage(p.userId, "❌ پرداخت شما رد شد. اگر اشتباه است با پشتیبانی تماس بگیرید.");
-    } catch { }
-    if (ctx) await safeReply(ctx, "❌ رد شد.");
+      await bot.api.sendMessage(
+        p.userId,
+        "❌ پرداخت شما رد شد. اگر اشتباه است با پشتیبانی تماس بگیرید."
+      );
+    } catch {}
+    if (ctx) await ctx.reply("❌ رد شد.");
   }
 }
