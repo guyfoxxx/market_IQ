@@ -40,7 +40,7 @@ DEFAULT_NEWS = "OFF"
 PUBLIC_APP_PATH = "/app"
 
 # پنل ادمین (توکن ساده)
-ADMIN_PANEL_TOKEN = "CHANGE_ME"
+ADMIN_PANEL_TOKEN = "4840"
 
 # اگر خالی بماند، /wallet یک پیام می‌دهد که تنظیم نشده است
 PUBLIC_WALLET_ADDRESS = ""
@@ -60,7 +60,7 @@ TZ = "Europe/Berlin"
 # Create a Queue named "valinaf25-jobs" in Cloudflare dashboard.
 [[queues.producers]]
 binding = "JOBS"
-queue = "valinaf25-jobs"
+queue = "valinaf"
 
 [[queues.consumers]]
 queue = "valinaf25-jobs"
