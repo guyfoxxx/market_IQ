@@ -1,75 +1,18 @@
-name = "valinaf25-telegram-signal-bot"
+name = "valinaf-trader-bot"
 main = "src/index.ts"
 compatibility_date = "2026-02-04"
-node_compat = true
 
-# Cron trigger: هر 5 دقیقه برای ارسال custom prompt های آماده
+# 1) یک KV Namespace بسازید:
+# wrangler kv:namespace create DB
+# سپس id را اینجا قرار دهید.
+kv_namespaces = [
+  { binding = "DB", id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID" }
+]
+
 [triggers]
+# برای پردازش Custom Prompt با تاخیر ۲ ساعت (هر ۵ دقیقه بررسی می‌کند)
 crons = ["*/5 * * * *"]
 
-[[kv_namespaces]]
-binding = "USERS_KV"
-id =  "8b953a37d3ef4e92a44d99d7ea3fe911"
-               
-
-[vars]
-# از getMe بگیرید و اینجا بگذارید (برای جلوگیری از درخواست اضافه در هر اجرا)
-BOT_INFO = "{}"
-
-# تنظیمات پیش‌فرض (همه قابل override با KV هم هستند)
-FREE_DAILY_LIMIT = "50"
-FREE_MONTHLY_LIMIT = "500"
-SUB_DAILY_LIMIT = "50"
-
-POINTS_PER_REF = "6"
-POINTS_PER_SUB_PURCHASE = "1000"
-REDEEM_POINTS = "500"
-REDEEM_DAYS = "30"
-
-REF_COMMISSION_STEP_PCT = "4"
-REF_COMMISSION_MAX_PCT = "20"
-
-SUB_PRICE_USDT = "29"
-SUB_DURATION_DAYS = "30"
-
-DEFAULT_TIMEFRAME = "H1"
-DEFAULT_RISK = "MEDIUM"
-DEFAULT_STYLE = "PA"
-DEFAULT_NEWS = "OFF"
-
-# لینک مینی‌اپ (بعد از Deploy آدرس Worker را اینجا بگذارید یا KV override کنید)
-PUBLIC_APP_PATH = "/app"
-
-# پنل ادمین (توکن ساده)
-ADMIN_PANEL_TOKEN = "Admin"
-
-# اگر خالی بماند، /wallet یک پیام می‌دهد که تنظیم نشده است
-PUBLIC_WALLET_ADDRESS = ""
-
-# Provider پیش‌فرض AI: openai | gemini
-AI_PROVIDER = "openai"
-
-# مدل‌ها
-OPENAI_MODEL = "gpt-4.1-mini"
-GEMINI_MODEL = "gemini-2.5-pro"
-
-# تایم‌زون برای نمایش‌ها
-TZ = "Europe/Berlin"
-
-# --- Payment verification (BSC / BEP20) ---
-PAYMENT_NETWORK = "BSC" # BSC | OFF
-PAYMENT_TOKEN_CONTRACT = "0x55d398326f99059fF775485246999027B3197955" # USDT BEP20 (default)
-AUTO_VERIFY_PAYMENTS = "OFF" # اگر ON باشد Cron تلاش می‌کند پرداخت‌های PENDING را verify و auto-approve کند (پیشنهاد: OFF)
-MIN_CONFIRMATIONS = "3"
-
-# --- AI routing ---
-AI_CHAIN = "openai,gemini,cloudflare"
-CLOUDFLARE_AI_MODEL = "@cf/meta/llama-3.1-8b-instruct"
-
-# --- Market data routing ---
-DATA_SOURCES_CRYPTO = "binance,twelvedata,alphavantage"
-DATA_SOURCES_OTHER = "twelvedata,alphavantage"
-
-# Cloudflare Workers AI binding (LLM fallback)
-[ai]
-binding = "AI"
+# اگر از محیط‌های مختلف استفاده می‌کنید:
+# [env.production]
+# name = "valinaf-trader-bot"

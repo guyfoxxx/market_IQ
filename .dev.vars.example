@@ -1,0 +1,47 @@
+# --- Telegram ---
+TELEGRAM_BOT_TOKEN=123456:ABC...
+TELEGRAM_WEBHOOK_SECRET=super-secret-telegram-webhook-token
+PUBLIC_BASE_URL=https://YOUR_WORKER_SUBDOMAIN.workers.dev
+
+# --- Roles ---
+OWNER_ID=123456789
+ADMIN_IDS=111,222,333
+ADMIN_PANEL_TOKEN=super-secret-admin-panel-token
+
+# --- Limits / Pricing ---
+FREE_DAILY_LIMIT=50
+FREE_MONTHLY_LIMIT=500
+SUB_DAILY_LIMIT=50
+SUB_PRICE=10
+SUB_DAYS=30
+
+# --- Referral ---
+REF_POINTS_PER_INVITE=6
+REF_POINTS_PER_SUB_PURCHASE=1000
+REF_REDEEM_POINTS=500
+REF_COMMISSION_STEP_PCT=4
+REF_COMMISSION_MAX_PCT=20
+
+# --- AI ---
+# AI_PROVIDER = openai | gemini | openai_compat
+AI_PROVIDER=openai
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-4o-mini
+OPENAI_BASE_URL=https://api.openai.com/v1
+
+GEMINI_API_KEY=...
+GEMINI_MODEL=gemini-2.0-flash
+
+# برای DeepSeek (یا هر سرویس OpenAI-compatible مثل OpenRouter/LiteLLM)
+AI_COMPAT_BASE_URL=https://api.openai.com/v1
+AI_COMPAT_API_KEY=...
+AI_COMPAT_MODEL=deepseek-chat
+
+# --- Market Data Keys (اختیاری) ---
+ALPHAVANTAGE_API_KEY=...
+FINNHUB_API_KEY=...
+TWELVEDATA_API_KEY=...
+POLYGON_API_KEY=...
+
+# --- Misc ---
+TIMEZONE=Europe/Berlin
