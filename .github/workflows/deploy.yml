@@ -17,17 +17,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Setup Node (no lockfile)
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
+          # ❌ cache: "npm"  (این باعث خطا بدون lockfile می‌شود)
 
-      # ✅ چون package-lock نداریم، npm ci خطا می‌دهد
-      - name: Install dependencies
+      - name: Install dependencies (no lockfile)
         run: npm install --no-audit --no-fund
 
-      # اگر اسکریپت build داری اجرا می‌شود، اگر نداری رد می‌شود
       - name: Build (if present)
         run: npm run build --if-present
 
