@@ -370,7 +370,7 @@ async function onCommand(ctx: { tg: any; storage: Storage; env: Env; user: UserP
   const nd = await getNewsDigest({ storage, env, market, symbol, maxItems: 8, cacheTtlSec: 600, summarize: true });
   await tg.sendMessage(chatId, nd.text);
   return;
-}
+
 
 
   }
