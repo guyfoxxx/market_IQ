@@ -1,10 +1,12 @@
 import { webhookCallback } from "grammy";
+import queueHandler from "./queue";
 import type { Env } from "./env";
 import { createBot } from "./bot";
 import { appHtml, htmlResponse as html } from "./pages/app";
 import { adminHtml, htmlResponse as htmlAdmin } from "./pages/admin";
 import { handleAdminApi, handleApi } from "./api";
-import { listDueCustomPrompts, markCustomPromptSent, getUser, putUser } from "./lib/storage";
+import { autoVerifyPendingPayment } from "./lib/payments";
+import { listDueCustomPrompts, markCustomPromptSent, getUser, putUser, listPayments } from "./lib/storage";
 
 let _bot: ReturnType<typeof createBot> | null = null;
 function getBot(env: Env) {
@@ -25,6 +27,20 @@ export default {
     if (url.pathname === "/webhook") {
       if (!isTelegramWebhook(request, env)) return new Response("forbidden", { status: 403 });
       const bot = getBot(env);
+
+    // Auto-verify pending payments (BSC USDT BEP20)
+    if ((env.AUTO_VERIFY || "OFF") === "ON") {
+      const pending = await listPayments(env, "PENDING");
+      for (const p of pending.slice(0, 25)) {
+        ctx.waitUntil((async () => {
+          try {
+            await autoVerifyPendingPayment(env, p);
+          } catch (e) {
+            console.log("auto-verify error", e);
+          }
+        })());
+      }
+    }
       return webhookCallback(bot, "cloudflare-mod")(request);
     }
 
@@ -46,7 +62,7 @@ export default {
 
     // Health
     if (url.pathname === "/") {
-      return new Response("OK - Valinaf25 bot worker", { headers: { "content-type": "text/plain; charset=utf-8" } });
+      return new Response("OK - Market IQ bot worker", { headers: { "content-type": "text/plain; charset=utf-8" } });
     }
 
     return new Response("not found", { status: 404 });
@@ -55,6 +71,20 @@ export default {
   // Cron job: send due custom prompts
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     const bot = getBot(env);
+
+    // Auto-verify pending payments (BSC USDT BEP20)
+    if ((env.AUTO_VERIFY || "OFF") === "ON") {
+      const pending = await listPayments(env, "PENDING");
+      for (const p of pending.slice(0, 25)) {
+        ctx.waitUntil((async () => {
+          try {
+            await autoVerifyPendingPayment(env, p);
+          } catch (e) {
+            console.log("auto-verify error", e);
+          }
+        })());
+      }
+    }
     const due = await listDueCustomPrompts(env);
     for (const task of due) {
       ctx.waitUntil((async () => {
@@ -75,4 +105,5 @@ ${task.promptText}`);
       })());
     }
   },
+  queue: queueHandler.queue,
 };

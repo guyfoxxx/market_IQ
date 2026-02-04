@@ -1,9 +1,12 @@
-import { Bot, Context, InlineKeyboard, Keyboard } from "grammy";
+import {
+  Bot, Context, InlineKeyboard, Keyboard } from "grammy";
 import type { Env } from "./env";
 import type { Market, Risk, Style, Timeframe, UserProfile } from "./types";
 import { callAI, callAIWithImage, extractJsonBlock } from "./lib/ai";
 import { fetchCandles } from "./lib/data";
 import { quickChartUrl, type Zone } from "./lib/chart";
+import { enqueue } from "./lib/queue";
+import { newJobId, type Job } from "./lib/jobs";
 import { consume, ensureQuotaReset, isAdmin, isOwner, remaining } from "./lib/quota";
 import {
   ensureUser,
@@ -11,6 +14,8 @@ import {
   getPromptBase,
   getPromptStyle,
   getPublicWallet,
+  getPlans,
+  findPlan,
   getReferrerByCode,
   getUser,
   listPayments,
@@ -21,7 +26,10 @@ import {
   setPromptBase,
   setPromptStyle,
   setPromptVision,
-  setPublicWallet,
+  setPublicWallet,,
+  setSelectedPlan,
+  getPlans
+
 } from "./lib/storage";
 import { fmtDateIso, isValidTxid, nowIso, parseFloatSafe, parseIntSafe } from "./lib/utils";
 
@@ -120,10 +128,10 @@ async function showMenu(ctx: MyContext) {
   const u = requireUser(ctx);
   await ensureQuotaReset(ctx.env, u);
   await ctx.reply(
-    `سلام ${u.name || u.firstName || ""} 👋
-به ربات Valinaf25 خوش آمدی.
-از منوی زیر انتخاب کن:`,
-    { reply_markup: mainMenuKb() }
+    `👋 سلام ${u.name || u.firstName || ""}\n\n` +
+      `✨ به *Market IQ Signal Bot* خوش آمدی.\n` +
+      `از منوی زیر یکی را انتخاب کن:`,
+    { reply_markup: mainMenuKb(), parse_mode: "Markdown" }
   );
 }
 
@@ -252,9 +260,43 @@ ${wallet ?? "❌ ولت تنظیم نشده"}
     );
   });
 
-  bot.command("tx", async (ctx) => {
+  
+
+
+async function showBuy(ctx: any, env: Env) {
+  const plans = await getPlans(env);
+  const wallet = await getPublicWallet(env);
+
+  const kb = new InlineKeyboard();
+  for (const p of plans) {
+    kb.text(`${p.title} • ${p.priceUsdt} USDT`, `plan:${p.id}`).row();
+  }
+  kb.url("💬 پشتیبانی", "https://t.me/").row();
+  kb.text("🔄 رفرش پلن‌ها", "planlist");
+
+  const w = wallet ? `<code>${wallet}</code>` : "هنوز تنظیم نشده";
+  const text =
+    `💳 <b>خرید اشتراک Market IQ</b>\n\n` +
+    `۱) یک پلن را انتخاب کن:\n` +
+    `۲) به آدرس ولت زیر USDT (BEP20) واریز کن:\n${w}\n\n` +
+    `۳) بعد از پرداخت، TxID را ارسال کن:\n<code>/tx YOUR_TXID</code>\n\n` +
+    `اگر پلن انتخاب کردی، نیاز نیست PLAN_ID بفرستی.`;
+
+  await ctx.reply(text, { parse_mode: "HTML", reply_markup: kb, disable_web_page_preview: true });
+}
+
+bot.command("buy", async (ctx) => showBuy(ctx, env));
+bot.command("pay", async (ctx) => showBuy(ctx, env));
+
+bot.command("pay", async (ctx) => {
+  await ctx.reply("برای خرید اشتراک از دستور /buy استفاده کنید.");
+});
+
+bot.command("tx", async (ctx) => {
     const u = requireUser(ctx);
-    const txid = (ctx.message?.text ?? "").split(" ").slice(1).join(" ").trim();
+    const parts = (ctx.message?.text ?? "").trim().split(/\s+/).slice(1);
+    const txid = (parts[0] || "").trim();
+    const planId = (parts[1] || "").trim();
     if (!txid || !isValidTxid(txid)) {
       await ctx.reply(`فرمت TxID معتبر نیست. مثال:
 /tx 0xabc123...`);
@@ -265,14 +307,18 @@ ${wallet ?? "❌ ولت تنظیم نشده"}
       await ctx.reply("این TxID قبلاً ثبت شده است.");
       return;
     }
-    const p = {
-      txid,
-      userId: u.id,
-      status: "PENDING" as const,
-      createdAt: nowIso(),
-      amountUsdt: parseFloatSafe(env.SUB_PRICE_USDT, 29),
-      planDays: parseIntSafe(env.SUB_DURATION_DAYS, 30),
-    };
+const plan = planId ? await findPlan(env, planId) : null;
+const plans = !plan ? await getPlans(env) : null;
+const chosen = plan || (plans && plans[0]) || null;
+
+const p = {
+  txid,
+  userId: u.id,
+  status: "PENDING" as const,
+  createdAt: nowIso(),
+  amountUsdt: chosen ? chosen.priceUsdt : parseFloatSafe(env.SUB_PRICE_USDT, 29),
+  planDays: chosen ? chosen.durationDays : parseIntSafe(env.SUB_DURATION_DAYS, 30),
+};
     await putPayment(env, p);
 
     await ctx.reply("✅ TxID ثبت شد. پس از بررسی ادمین، به شما اطلاع داده می‌شود.");
@@ -365,14 +411,18 @@ ${codes}
   bot.command("approve", async (ctx) => {
     const u = requireUser(ctx);
     if (!isAdmin(u, env)) return ctx.reply("دسترسی ندارید.");
-    const txid = (ctx.message?.text ?? "").split(" ").slice(1).join(" ").trim();
+    const parts = (ctx.message?.text ?? "").trim().split(/\s+/).slice(1);
+    const txid = (parts[0] || "").trim();
+    const planId = (parts[1] || "").trim();
     await approvePayment(bot, env, u.id, txid, true, ctx);
   });
 
   bot.command("reject", async (ctx) => {
     const u = requireUser(ctx);
     if (!isAdmin(u, env)) return ctx.reply("دسترسی ندارید.");
-    const txid = (ctx.message?.text ?? "").split(" ").slice(1).join(" ").trim();
+    const parts = (ctx.message?.text ?? "").trim().split(/\s+/).slice(1);
+    const txid = (parts[0] || "").trim();
+    const planId = (parts[1] || "").trim();
     await approvePayment(bot, env, u.id, txid, false, ctx);
   });
 

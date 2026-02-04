@@ -7,6 +7,8 @@ import {
   getPromptBase,
   getPromptVision,
   getPromptStyle,
+  getPlans,
+  setPlans,
   getUser,
   listPayments,
   putUser,
@@ -204,7 +206,19 @@ export async function handleAdminApi(req: Request, env: Env): Promise<Response> 
     return json({ ok: true });
   }
 
-  if (path === "/admin/api/banner") {
+if (path === "/admin/api/plans") {
+  if (req.method === "GET") {
+    const plans = await getPlans(env);
+    return json({ ok: true, plans });
+  }
+  const body = await req.json().catch(() => ({}));
+  const plans = Array.isArray(body.plans) ? body.plans : [];
+  await setPlans(env, plans);
+  return json({ ok: true });
+}
+
+if (path === "/admin/api/banner") {
+
     const body = await req.json().catch(() => ({}));
     await setBanner(env, { enabled: !!body.enabled, text: String(body.text || ""), url: String(body.url || "") });
     return json({ ok: true });
