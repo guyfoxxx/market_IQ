@@ -373,7 +373,7 @@ async function onCommand(ctx: { tg: any; storage: Storage; env: Env; user: UserP
 
 
 
-  }
+  
 
   if (cmd === '/customprompt') {
     await storage.setSession(user.id, { mode: 'customprompt_wait_text' });
