@@ -154,3 +154,38 @@ async function fetchAlphaVantage(env: Env, symbol: string, tf: Timeframe, limit:
     };
   });
 }
+
+
+export async function fetchCandlesWithMeta(
+  env: Env,
+  market: Market,
+  symbol: string,
+  tf: Timeframe,
+  limit = 200
+): Promise<{ candles: Candle[]; source: string; normalizedSymbol: string }> {
+  const normalizedSymbol = symbol.trim().toUpperCase();
+
+  if (market === "CRYPTO") {
+    const candles = await fetchBinance(normalizedSymbol, tf, limit);
+    return { candles, source: "binance", normalizedSymbol };
+  }
+
+  try {
+    const candles = await fetchYahoo(normalizedSymbol, tf, limit);
+    return { candles, source: "yahoo", normalizedSymbol };
+  } catch (e) {
+    if (env.TWELVEDATA_API_KEY) {
+      try {
+        const candles = await fetchTwelveData(env, normalizedSymbol, tf, limit);
+        return { candles, source: "twelvedata", normalizedSymbol };
+      } catch {}
+    }
+    if (env.ALPHAVANTAGE_API_KEY) {
+      try {
+        const candles = await fetchAlphaVantage(env, normalizedSymbol, tf, limit);
+        return { candles, source: "alphavantage", normalizedSymbol };
+      } catch {}
+    }
+    throw e;
+  }
+}

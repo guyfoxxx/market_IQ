@@ -9,9 +9,9 @@ export type Job =
       market: Market;
       symbol: string;
       timeframe: Timeframe;
-      style: Style;
-      risk: Risk;
-      news: "ON" | "OFF";
+      style: TradeStyle;
+      risk: RiskLevel;
+      news: boolean;
     }
   | {
       type: "CUSTOM_PROMPT_DELIVER";

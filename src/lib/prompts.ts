@@ -1,4 +1,4 @@
-import type { Market, Timeframe, Risk } from "../types";
+import type { Market, Timeframe, RiskLevel } from "../types";
 import type { Candle } from "./data";
 
 export function buildAnalysisPrompt(args: {
@@ -9,8 +9,8 @@ export function buildAnalysisPrompt(args: {
   normalizedSymbol: string;
   dataSource: string;
   timeframe: Timeframe;
-  risk: Risk;
-  news: "ON" | "OFF";
+  risk: RiskLevel;
+  news: boolean;
   candles: Candle[];
 }) {
   const ohlc = args.candles.map((c) => [c.t, c.o, c.h, c.l, c.c]);
@@ -28,7 +28,7 @@ export function buildAnalysisPrompt(args: {
     `data_source=${args.dataSource}`,
     `timeframe=${args.timeframe}`,
     `risk=${args.risk}`,
-    `news=${args.news}`,
+    `news=${args.news ? "ON" : "OFF"}`,
     "",
     "[Data: OHLC]",
     JSON.stringify({ ohlc }),

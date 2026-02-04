@@ -132,7 +132,7 @@ async function callOpenAIResponsesVision(
 async function callGemini(env: Env, prompt: string, opts?: { temperature?: number }): Promise<string> {
   const model = env.GEMINI_MODEL || "gemini-1.5-pro";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(
-    env.GEMINI_API_KEY
+    env.GEMINI_API_KEY!
   )}`;
 
   const res = await fetch(url, {
