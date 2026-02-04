@@ -13,7 +13,7 @@ export async function handleAdminApi(req: Request, env: Env, storage: Storage): 
   const url = new URL(req.url);
   const path = url.pathname.replace('/admin/api', '');
 
-  const body = ((await req.json().catch(() => ({}))) as any);
+  const body = await req.json().catch(() => ({} as any));
 
   if (path === '/wallet') {
     await storage.setWalletPublic(String(body.wallet || ''));
