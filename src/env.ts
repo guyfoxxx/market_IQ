@@ -55,14 +55,5 @@ export interface Env {
   /** Optional Workers AI model override */
   CLOUDFLARE_AI_MODEL?: string;
 
-  // Payment verification (optional)
-  AUTO_VERIFY?: string;
-  BSCSCAN_API_KEY?: string;
-  USDT_BSC_CONTRACT?: string;
-
-  // Bindings (optional)
-  JOBS?: any;
-  CACHE_KV?: KVNamespace;
-
   TZ: string;
 }
