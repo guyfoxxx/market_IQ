@@ -93,6 +93,7 @@ export function appHtml(env: Env) {
         <option value="RTM">RTM</option>
         <option value="ICT">ICT</option>
         <option value="PA">پرایس اکشن</option>
+        <option value="ATR">ATR (Volatility)</option>
         <option value="CUSTOM">پرامپت اختصاصی</option>
       </select>
       <select id="news">
