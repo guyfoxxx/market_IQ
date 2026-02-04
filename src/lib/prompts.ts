@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import type { Market, Timeframe, RiskLevel } from "../types";
+=======
+import type { Market, Timeframe, Risk } from "../types";
+>>>>>>> e15cf79 (first commit)
 import type { Candle } from "./data";
 
 export function buildAnalysisPrompt(args: {
@@ -9,8 +13,13 @@ export function buildAnalysisPrompt(args: {
   normalizedSymbol: string;
   dataSource: string;
   timeframe: Timeframe;
+<<<<<<< HEAD
   risk: RiskLevel;
   news: boolean;
+=======
+  risk: Risk;
+  news: "ON" | "OFF";
+>>>>>>> e15cf79 (first commit)
   candles: Candle[];
 }) {
   const ohlc = args.candles.map((c) => [c.t, c.o, c.h, c.l, c.c]);
@@ -28,7 +37,11 @@ export function buildAnalysisPrompt(args: {
     `data_source=${args.dataSource}`,
     `timeframe=${args.timeframe}`,
     `risk=${args.risk}`,
+<<<<<<< HEAD
     `news=${args.news ? "ON" : "OFF"}`,
+=======
+    `news=${args.news}`,
+>>>>>>> e15cf79 (first commit)
     "",
     "[Data: OHLC]",
     JSON.stringify({ ohlc }),

@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 import {
   Bot, Context, InlineKeyboard, Keyboard } from "grammy";
+=======
+import { Bot, Context, InlineKeyboard, Keyboard } from "grammy";
+>>>>>>> e15cf79 (first commit)
 import type { Env } from "./env";
 import type { Market, Risk, Style, Timeframe, UserProfile } from "./types";
 import { callAI, callAIWithImage, extractJsonBlock } from "./lib/ai";
@@ -28,11 +32,19 @@ import {
   setPromptVision,
   setPublicWallet,
   setSelectedPlan,
+<<<<<<< HEAD
   getPlans
 
 } from "./lib/storage";
 import { fmtDateIso, isValidTxid, nowIso, parseFloatSafe, parseIntSafe } from "./lib/utils";
 
+=======
+} from "./lib/storage";
+import { fmtDateIso, isValidTxid, nowIso, parseFloatSafe, parseIntSafe } from "./lib/utils";
+
+
+
+>>>>>>> e15cf79 (first commit)
 type MyContext = Context & {
   env: Env;
   user?: UserProfile;
@@ -187,12 +199,15 @@ export function createBot(env: Env) {
 
   bot.command("signals", async (ctx) => {
     const u = requireUser(ctx);
+<<<<<<< HEAD
     const r = await consume(env, u, 1);
     if (!r.ok) {
       await ctx.reply(`${r.reason}
 برای مشاهده سهمیه: /profile`);
       return;
     }
+=======
+>>>>>>> e15cf79 (first commit)
     await setState(env, u.id, { flow: "signals", step: "choose_market" });
     const kb = new InlineKeyboard()
       .text("CRYPTO", "sig:market:CRYPTO")
@@ -472,6 +487,48 @@ ${ctx.me.username ? `https://<YOUR_WORKER_URL>/admin` : "/admin"}
     const u = requireUser(ctx);
     const data = ctx.callbackQuery.data;
 
+<<<<<<< HEAD
+=======
+// Inline plan selection (modern UX)
+if (data.startsWith("plan:")) {
+  const planId = data.slice("plan:".length);
+  await setSelectedPlan(env, ctx.from!.id, planId);
+  await ctx.answerCallbackQuery({ text: "✅ پلن انتخاب شد" });
+
+  const wallet = await getPublicWallet(env);
+  const w = wallet ? `<code>${wallet}</code>` : "هنوز تنظیم نشده";
+
+  const kb = new InlineKeyboard()
+    .text("✅ پرداخت کردم", "paydone").row()
+    .text("🔙 برگشت به پلن‌ها", "planlist");
+
+  await ctx.editMessageText(
+    `✅ پلن انتخاب شد: <code>${planId}</code>\n\n` +
+      `۱) به آدرس ولت زیر USDT (BEP20) واریز کن:\n${w}\n\n` +
+      `۲) بعد از پرداخت روی «پرداخت کردم» بزن یا TxID را ارسال کن:\n<code>/tx YOUR_TXID</code>`,
+    { parse_mode: "HTML", reply_markup: kb, disable_web_page_preview: true }
+  );
+  return;
+}
+
+if (data === "paydone") {
+  await ctx.answerCallbackQuery({ text: "TxID را ارسال کن" });
+  await ctx.reply(
+    `✅ عالی! حالا TxID پرداخت را ارسال کن:\n<code>/tx YOUR_TXID</code>\n\n` +
+      `اگر TxID را کپی کردی، فقط جایگزین کن و بفرست.`,
+    { parse_mode: "HTML" }
+  );
+  return;
+}
+
+if (data === "planlist") {
+  await ctx.answerCallbackQuery();
+  await showBuy(ctx, env);
+  return;
+}
+
+
+>>>>>>> e15cf79 (first commit)
     // Menu
     if (data === "menu:home") {
       await ctx.answerCallbackQuery();

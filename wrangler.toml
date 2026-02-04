@@ -9,7 +9,11 @@ crons = ["*/5 * * * *"]
 
 [[kv_namespaces]]
 binding = "USERS_KV"
+<<<<<<< HEAD
 id = "8b953a37d3ef4e92a44d99d7ea3fe911"
+=======
+id = "PUT_YOUR_KV_NAMESPACE_ID_HERE"
+>>>>>>> e15cf79 (first commit)
 
 [vars]
 # از getMe بگیرید و اینجا بگذارید (برای جلوگیری از درخواست اضافه در هر اجرا)
@@ -40,7 +44,11 @@ DEFAULT_NEWS = "OFF"
 PUBLIC_APP_PATH = "/app"
 
 # پنل ادمین (توکن ساده)
+<<<<<<< HEAD
 ADMIN_PANEL_TOKEN = "4840"
+=======
+ADMIN_PANEL_TOKEN = "CHANGE_ME"
+>>>>>>> e15cf79 (first commit)
 
 # اگر خالی بماند، /wallet یک پیام می‌دهد که تنظیم نشده است
 PUBLIC_WALLET_ADDRESS = ""
@@ -77,4 +85,8 @@ bucket_name = "valinaf25-assets"
 # Create a KV namespace and bind it as CACHE_KV, or omit and the bot will fallback to USERS_KV.
 [[kv_namespaces]]
 binding = "CACHE_KV"
+<<<<<<< HEAD
 id = "9cb3d76f32e54d03a69fcdd7a0ff6e13"
+=======
+id = "PUT_YOUR_CACHE_KV_NAMESPACE_ID_HERE"
+>>>>>>> e15cf79 (first commit)

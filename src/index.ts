@@ -27,6 +27,7 @@ export default {
     if (url.pathname === "/webhook") {
       if (!isTelegramWebhook(request, env)) return new Response("forbidden", { status: 403 });
       const bot = getBot(env);
+<<<<<<< HEAD
 
     // Auto-verify pending payments (BSC USDT BEP20)
     if ((env.AUTO_VERIFY || "OFF") === "ON") {
@@ -41,6 +42,8 @@ export default {
         })());
       }
     }
+=======
+>>>>>>> e15cf79 (first commit)
       return webhookCallback(bot, "cloudflare-mod")(request);
     }
 

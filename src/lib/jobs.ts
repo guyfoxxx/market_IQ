@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import type { Market, Timeframe, TradeStyle, RiskLevel } from "../types";
+=======
+import type { Market, Timeframe, Style, Risk } from "../types";
+>>>>>>> e15cf79 (first commit)
 
 export type Job =
   | {
@@ -9,9 +13,15 @@ export type Job =
       market: Market;
       symbol: string;
       timeframe: Timeframe;
+<<<<<<< HEAD
       style: TradeStyle;
       risk: RiskLevel;
       news: boolean;
+=======
+      style: Style;
+      risk: Risk;
+      news: "ON" | "OFF";
+>>>>>>> e15cf79 (first commit)
     }
   | {
       type: "CUSTOM_PROMPT_DELIVER";

@@ -108,3 +108,26 @@ npm run set-webhook
 
 ### کش تحلیل (AI Cache)
 برای کاهش هزینه و افزایش سرعت، نتیجه تحلیل برای ترکیب (market/symbol/tf/style/risk/news) به مدت ~120 ثانیه در KV کش می‌شود.
+<<<<<<< HEAD
+=======
+
+
+### بررسی خودکار پرداخت (Auto-Verify)
+برای فعال‌سازی:
+- Secret: BSCSCAN_API_KEY
+- Variable: AUTO_VERIFY=ON
+- Wallet عمومی را با /setwallet یا config:wallet تنظیم کنید.
+
+
+### Plans (KV)
+- Admin: /admin → Subscription Plans (کلید config:plans)
+- User: /buy shows plans, /tx TXID PLAN_ID chooses a plan.
+
+
+### UX خرید (Inline Buttons)
+در /buy و /pay پلن‌ها با دکمه‌های Inline نمایش داده می‌شوند و انتخاب پلن در پروفایل ذخیره می‌شود؛ سپس /tx فقط TxID می‌خواهد.
+
+
+### دکمه «پرداخت کردم»
+بعد از انتخاب پلن در /buy، دکمه «✅ پرداخت کردم» نمایش داده می‌شود تا کاربر بدون تایپ، راهنمای ارسال TxID را دریافت کند.
+>>>>>>> e15cf79 (first commit)
