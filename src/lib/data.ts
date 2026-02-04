@@ -19,19 +19,24 @@ function tfToBinanceInterval(tf: Timeframe): string {
 }
 
 export async function fetchCandles(env: Env, market: Market, symbol: string, tf: Timeframe, limit = 200): Promise<Candle[]> {
-  // Priority: Binance for crypto, otherwise Yahoo, fallback to AlphaVantage/TwelveData if keys exist.
+  // Priority: Binance for crypto, otherwise Yahoo, with fallbacks.
   if (market === "CRYPTO") return fetchBinance(symbol, tf, limit);
 
   // If user passes like AAPL or XAUUSD, Yahoo format differs. We'll do best effort.
   try {
     return await fetchYahoo(symbol, tf, limit);
   } catch (e) {
-    // fallbacks
+    if (env.FINNHUB_API_KEY) {
+      try { return await fetchFinnhub(env, market, symbol, tf, limit); } catch {}
+    }
     if (env.TWELVEDATA_API_KEY) {
       try { return await fetchTwelveData(env, symbol, tf, limit); } catch {}
     }
     if (env.ALPHAVANTAGE_API_KEY) {
       try { return await fetchAlphaVantage(env, symbol, tf, limit); } catch {}
+    }
+    if (env.POLYGON_API_KEY) {
+      try { return await fetchPolygon(env, symbol, tf, limit); } catch {}
     }
     throw e;
   }
@@ -155,6 +160,75 @@ async function fetchAlphaVantage(env: Env, symbol: string, tf: Timeframe, limit:
   });
 }
 
+function tfToFinnhubResolution(tf: Timeframe): string {
+  if (tf === "M15") return "15";
+  if (tf === "H1") return "60";
+  if (tf === "H4") return "240";
+  return "D";
+}
+
+async function fetchFinnhub(env: Env, market: Market, symbol: string, tf: Timeframe, limit: number): Promise<Candle[]> {
+  const resolution = tfToFinnhubResolution(tf);
+  const now = Math.floor(Date.now() / 1000);
+  const secondsPer = tf === "D1" ? 86400 : tf === "H4" ? 14400 : tf === "H1" ? 3600 : 900;
+  const from = now - secondsPer * Math.max(10, limit);
+  const endpoint = market === "STOCKS" ? "stock/candle" : "forex/candle";
+  const url = `https://finnhub.io/api/v1/${endpoint}?symbol=${encodeURIComponent(symbol)}&resolution=${encodeURIComponent(
+    resolution
+  )}&from=${from}&to=${now}&token=${encodeURIComponent(env.FINNHUB_API_KEY!)}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Finnhub error ${res.status}`);
+  const data = await res.json() as any;
+  if (data?.s !== "ok") throw new Error("Finnhub: no data");
+  const out: Candle[] = [];
+  for (let i = 0; i < data.t.length; i++) {
+    out.push({
+      t: Number(data.t[i]) * 1000,
+      o: Number(data.o[i]),
+      h: Number(data.h[i]),
+      l: Number(data.l[i]),
+      c: Number(data.c[i]),
+      v: data.v ? Number(data.v[i]) : undefined,
+    });
+  }
+  return out.slice(-limit);
+}
+
+function tfToPolygon(tf: Timeframe): { multiplier: number; timespan: "minute" | "hour" | "day" } {
+  if (tf === "M15") return { multiplier: 15, timespan: "minute" };
+  if (tf === "H1") return { multiplier: 1, timespan: "hour" };
+  if (tf === "H4") return { multiplier: 4, timespan: "hour" };
+  return { multiplier: 1, timespan: "day" };
+}
+
+async function fetchPolygon(env: Env, symbol: string, tf: Timeframe, limit: number): Promise<Candle[]> {
+  const { multiplier, timespan } = tfToPolygon(tf);
+  const now = Date.now();
+  const msPer =
+    timespan === "day" ? 86_400_000 : timespan === "hour" ? 3_600_000 * multiplier : 60_000 * multiplier;
+  const from = new Date(now - msPer * Math.max(10, limit));
+  const fromDate = from.toISOString().slice(0, 10);
+  const toDate = new Date(now).toISOString().slice(0, 10);
+  const url = `https://api.polygon.io/v2/aggs/ticker/${encodeURIComponent(
+    symbol
+  )}/range/${multiplier}/${timespan}/${fromDate}/${toDate}?adjusted=true&limit=${limit}&sort=asc&apiKey=${encodeURIComponent(
+    env.POLYGON_API_KEY!
+  )}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Polygon error ${res.status}`);
+  const data = await res.json() as any;
+  const results = data?.results;
+  if (!Array.isArray(results) || results.length === 0) throw new Error("Polygon: no results");
+  return results.map((r: any) => ({
+    t: Number(r.t),
+    o: Number(r.o),
+    h: Number(r.h),
+    l: Number(r.l),
+    c: Number(r.c),
+    v: r.v ? Number(r.v) : undefined,
+  })).slice(-limit);
+}
+
 
 export async function fetchCandlesWithMeta(
   env: Env,
@@ -174,6 +248,12 @@ export async function fetchCandlesWithMeta(
     const candles = await fetchYahoo(normalizedSymbol, tf, limit);
     return { candles, source: "yahoo", normalizedSymbol };
   } catch (e) {
+    if (env.FINNHUB_API_KEY) {
+      try {
+        const candles = await fetchFinnhub(env, market, normalizedSymbol, tf, limit);
+        return { candles, source: "finnhub", normalizedSymbol };
+      } catch {}
+    }
     if (env.TWELVEDATA_API_KEY) {
       try {
         const candles = await fetchTwelveData(env, normalizedSymbol, tf, limit);
@@ -184,6 +264,12 @@ export async function fetchCandlesWithMeta(
       try {
         const candles = await fetchAlphaVantage(env, normalizedSymbol, tf, limit);
         return { candles, source: "alphavantage", normalizedSymbol };
+      } catch {}
+    }
+    if (env.POLYGON_API_KEY) {
+      try {
+        const candles = await fetchPolygon(env, normalizedSymbol, tf, limit);
+        return { candles, source: "polygon", normalizedSymbol };
       } catch {}
     }
     throw e;
