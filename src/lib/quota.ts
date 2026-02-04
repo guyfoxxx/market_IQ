@@ -16,6 +16,16 @@ export function isOwner(u: UserProfile, env: Env): boolean {
 }
 
 export async function ensureQuotaReset(env: Env, u: UserProfile) {
+  // Backward compatibility: old user records might miss quota
+  const anyU: any = u as any;
+  if (!anyU.quota) {
+    anyU.quota = { dailyUsed: 0, monthlyUsed: 0, lastDailyReset: todayUtc(), lastMonthlyReset: monthUtc() };
+  }
+  if (anyU.quota.dailyUsed == null) anyU.quota.dailyUsed = 0;
+  if (anyU.quota.monthlyUsed == null) anyU.quota.monthlyUsed = 0;
+  if (!anyU.quota.lastDailyReset) anyU.quota.lastDailyReset = todayUtc();
+  if (!anyU.quota.lastMonthlyReset) anyU.quota.lastMonthlyReset = monthUtc();
+
   const today = todayUtc();
   const month = monthUtc();
   if (u.quota.lastDailyReset !== today) {

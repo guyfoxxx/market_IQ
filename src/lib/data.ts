@@ -10,12 +10,6 @@ export interface Candle {
   v?: number;
 }
 
-export interface CandleFetchResult {
-  candles: Candle[];
-  source: "binance" | "twelvedata" | "alphavantage" | "yahoo";
-  normalizedSymbol: string;
-}
-
 function tfToBinanceInterval(tf: Timeframe): string {
   if (tf === "M15") return "15m";
   if (tf === "H1") return "1h";
@@ -23,96 +17,27 @@ function tfToBinanceInterval(tf: Timeframe): string {
   return "1d";
 }
 
-function normalizeSymbolForTwelveData(market: Market, symbol: string): string {
-  const s = symbol.trim();
-
-  // Yahoo-style forex symbols: EURUSD=X
-  if (market === "FOREX" || market === "METALS") {
-    const cleaned = s.replace(/=X$/i, "").replace("-", "").replace("_", "").toUpperCase();
-    // EURUSD, XAUUSD
-    if (/^[A-Z]{6}$/.test(cleaned)) return `${cleaned.slice(0, 3)}/${cleaned.slice(3)}`;
-    // already EUR/USD
-    if (s.includes("/")) return s.toUpperCase();
-    return cleaned;
-  }
-
-  if (market === "CRYPTO") {
-    // BTCUSDT -> BTC/USDT (best effort)
-    const up = s.replace("-", "").replace("_", "").toUpperCase();
-    if (/^[A-Z]{6,12}$/.test(up) && up.endsWith("USDT")) return `${up.slice(0, -4)}/USDT`;
-    if (/^[A-Z]{6,12}$/.test(up) && up.endsWith("USD")) return `${up.slice(0, -3)}/USD`;
-    if (s.includes("/")) return s.toUpperCase();
-    return up;
-  }
-
-  return s.toUpperCase();
-}
-
 export async function fetchCandles(env: Env, market: Market, symbol: string, tf: Timeframe, limit = 200): Promise<Candle[]> {
-  const r = await fetchCandlesWithMeta(env, market, symbol, tf, limit);
-  return r.candles;
-}
+  // Priority: Binance for crypto, otherwise Yahoo, fallback to AlphaVantage/TwelveData if keys exist.
+  if (market === "CRYPTO") return fetchBinance(symbol, tf, limit);
 
-export async function fetchCandlesWithMeta(env: Env, market: Market, symbol: string, tf: Timeframe, limit = 200): Promise<CandleFetchResult> {
-  const cryptoOrder = (env.DATA_SOURCES_CRYPTO ?? "binance,twelvedata,alphavantage").split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
-  const otherOrder = (env.DATA_SOURCES_OTHER ?? "twelvedata,alphavantage").split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
-
-  const order = market === "CRYPTO" ? cryptoOrder : otherOrder;
-
-  const errors: string[] = [];
-  for (const src of order) {
-    try {
-      if (src === "binance") {
-        if (market !== "CRYPTO") throw new Error("binance only for crypto");
-        const candles = await fetchBinance(symbol, tf, limit);
-        return { candles, source: "binance", normalizedSymbol: symbol.toUpperCase() };
-      }
-
-      if (src === "twelvedata") {
-        if (!env.TWELVEDATA_API_KEY) throw new Error("TWELVEDATA_API_KEY missing");
-        const sym = normalizeSymbolForTwelveData(market, symbol);
-
-        // Extra best-effort: if crypto uses USDT, also try USD
-        try {
-          const candles = await fetchTwelveData(env, sym, tf, limit);
-          return { candles, source: "twelvedata", normalizedSymbol: sym };
-        } catch (e1: any) {
-          if (market === "CRYPTO" && sym.endsWith("/USDT")) {
-            const alt = sym.replace("/USDT", "/USD");
-            const candles = await fetchTwelveData(env, alt, tf, limit);
-            return { candles, source: "twelvedata", normalizedSymbol: alt };
-          }
-          throw e1;
-        }
-      }
-
-      if (src === "alphavantage") {
-        if (!env.ALPHAVANTAGE_API_KEY) throw new Error("ALPHAVANTAGE_API_KEY missing");
-        const candles = await fetchAlphaVantage(env, market, symbol, tf, limit);
-        return { candles, source: "alphavantage", normalizedSymbol: symbol.toUpperCase() };
-      }
-
-      if (src === "yahoo") {
-        const candles = await fetchYahoo(symbol, tf, limit);
-        return { candles, source: "yahoo", normalizedSymbol: symbol };
-      }
-    } catch (e: any) {
-      errors.push(`${src}: ${e?.message ?? "error"}`);
-    }
-  }
-
-  // last resort: Yahoo
+  // If user passes like AAPL or XAUUSD, Yahoo format differs. We'll do best effort.
   try {
-    const candles = await fetchYahoo(symbol, tf, limit);
-    return { candles, source: "yahoo", normalizedSymbol: symbol };
-  } catch (e: any) {
-    errors.push(`yahoo: ${e?.message ?? "error"}`);
+    return await fetchYahoo(symbol, tf, limit);
+  } catch (e) {
+    // fallbacks
+    if (env.TWELVEDATA_API_KEY) {
+      try { return await fetchTwelveData(env, symbol, tf, limit); } catch {}
+    }
+    if (env.ALPHAVANTAGE_API_KEY) {
+      try { return await fetchAlphaVantage(env, symbol, tf, limit); } catch {}
+    }
+    throw e;
   }
-
-  throw new Error("All data sources failed: " + errors.join(" | "));
 }
 
 async function fetchBinance(symbol: string, tf: Timeframe, limit: number): Promise<Candle[]> {
+  // Expect symbol like BTCUSDT, ETHUSDT
   const interval = tfToBinanceInterval(tf);
   const url = `https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(symbol.toUpperCase())}&interval=${encodeURIComponent(interval)}&limit=${limit}`;
   const res = await fetch(url);
@@ -131,7 +56,7 @@ async function fetchBinance(symbol: string, tf: Timeframe, limit: number): Promi
 function tfToYahooInterval(tf: Timeframe) {
   if (tf === "M15") return "15m";
   if (tf === "H1") return "60m";
-  if (tf === "H4") return "60m";
+  if (tf === "H4") return "60m"; // Yahoo doesn't have 4h directly; we'll sample every 60m and later downsample if needed.
   return "1d";
 }
 
@@ -142,6 +67,7 @@ function yahooRange(tf: Timeframe) {
 }
 
 async function fetchYahoo(symbol: string, tf: Timeframe, limit: number): Promise<Candle[]> {
+  // Accept BTC-USD, EURUSD=X, XAUUSD=X, AAPL, etc.
   const interval = tfToYahooInterval(tf);
   const range = yahooRange(tf);
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${interval}&range=${range}`;
@@ -160,6 +86,7 @@ async function fetchYahoo(symbol: string, tf: Timeframe, limit: number): Promise
     if ([o, h, l, c].some((x) => x == null)) continue;
     out.push({ t, o, h, l, c, v: q.volume?.[i] });
   }
+  // downsample for H4
   if (tf === "H4") return downsample(out, 4).slice(-limit);
   return out.slice(-limit);
 }
@@ -184,7 +111,6 @@ async function fetchTwelveData(env: Env, symbol: string, tf: Timeframe, limit: n
   const res = await fetch(url);
   if (!res.ok) throw new Error(`TwelveData error ${res.status}`);
   const data = await res.json() as any;
-  if (data?.status === "error") throw new Error(data?.message || "TwelveData: error");
   const values = data?.values;
   if (!Array.isArray(values)) throw new Error("TwelveData: no values");
   return values.reverse().map((v: any) => ({
@@ -197,44 +123,19 @@ async function fetchTwelveData(env: Env, symbol: string, tf: Timeframe, limit: n
   }));
 }
 
-async function fetchAlphaVantage(env: Env, market: Market, symbol: string, tf: Timeframe, limit: number): Promise<Candle[]> {
+async function fetchAlphaVantage(env: Env, symbol: string, tf: Timeframe, limit: number): Promise<Candle[]> {
+  // Simplified: intraday for M15/H1, daily for D1
   const key = env.ALPHAVANTAGE_API_KEY!;
-  const sym = symbol.trim().toUpperCase();
-
-  // Forex and metals (treat as FX)
-  if (market === "FOREX" || market === "METALS") {
-    // EURUSD or EUR/USD or EURUSD=X
-    const cleaned = sym.replace(/=X$/i, "").replace("/", "");
-    if (!/^[A-Z]{6}$/.test(cleaned)) throw new Error("AlphaVantage FX expects 6-letter pair (e.g., EURUSD)");
-    const from = cleaned.slice(0, 3);
-    const to = cleaned.slice(3);
-    if (tf === "D1") {
-      const url = `https://www.alphavantage.co/query?function=FX_DAILY&from_symbol=${encodeURIComponent(from)}&to_symbol=${encodeURIComponent(to)}&apikey=${encodeURIComponent(key)}`;
-      return parseAlphaTimeSeries(url, limit);
-    } else {
-      const interval = tf === "M15" ? "15min" : "60min";
-      const url = `https://www.alphavantage.co/query?function=FX_INTRADAY&from_symbol=${encodeURIComponent(from)}&to_symbol=${encodeURIComponent(to)}&interval=${interval}&outputsize=compact&apikey=${encodeURIComponent(key)}`;
-      return parseAlphaTimeSeries(url, limit);
-    }
-  }
-
-  // Stocks
+  let url: string;
   if (tf === "D1") {
-    const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${encodeURIComponent(sym)}&apikey=${encodeURIComponent(key)}`;
-    return parseAlphaTimeSeries(url, limit);
+    url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${encodeURIComponent(symbol)}&apikey=${encodeURIComponent(key)}`;
   } else {
     const interval = tf === "M15" ? "15min" : "60min";
-    const url = `https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=${encodeURIComponent(sym)}&interval=${interval}&outputsize=compact&apikey=${encodeURIComponent(key)}`;
-    return parseAlphaTimeSeries(url, limit);
+    url = `https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=${encodeURIComponent(symbol)}&interval=${interval}&outputsize=compact&apikey=${encodeURIComponent(key)}`;
   }
-}
-
-async function parseAlphaTimeSeries(url: string, limit: number): Promise<Candle[]> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`AlphaVantage error ${res.status}`);
   const data = await res.json() as any;
-  if (data?.Note) throw new Error("AlphaVantage rate limit");
-  if (data?.Error_Message) throw new Error(data.Error_Message);
   const seriesKey = Object.keys(data).find((k) => k.toLowerCase().includes("time series"));
   const series = seriesKey ? data[seriesKey] : null;
   if (!series) throw new Error("AlphaVantage: no time series");
