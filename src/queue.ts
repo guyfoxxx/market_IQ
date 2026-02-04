@@ -1,6 +1,6 @@
 import type { Env } from "./env";
 import type { Job } from "./lib/jobs";
-import { fetchCandlesWithMeta } from "./lib/data";
+import { fetchCandles } from "./lib/data";
 import { callAI, extractJsonBlock } from "./lib/ai";
 import { quickChartUrl, type Zone } from "./lib/chart";
 import { getUser, getPromptBase, getPromptStyle } from "./lib/storage";
@@ -78,13 +78,9 @@ export async function handleJob(env: Env, job: Job) {
     return;
   }
 
-  const { candles, source: dataSource, normalizedSymbol } = await fetchCandlesWithMeta(
-    env,
-    job.market,
-    job.symbol,
-    job.timeframe,
-    200
-  );
+  const candles = await fetchCandles(env, job.market, job.symbol, job.timeframe, 200);
+  const dataSource = "auto";
+  const normalizedSymbol = job.symbol.toUpperCase();
 
   const base = await getPromptBase(env);
   const stylePrompt = await getPromptStyle(env, job.style);
@@ -150,3 +146,21 @@ export async function handleJob(env: Env, job: Job) {
     await send(env, header + "\n\n" + outText + tailJson);
   }
 }
+
+
+export default {
+  async queue(batch: MessageBatch<Job>, env: Env): Promise<void> {
+    for (const msg of batch.messages) {
+      try {
+        await handleJob(env, msg.body);
+      } catch (e) {
+        const b: any = msg.body as any;
+        if (b?.chatId) {
+          try {
+            await send(env, b.chatId, "❌ خطا در پردازش درخواست. لطفاً دوباره تلاش کنید.");
+          } catch {}
+        }
+      }
+    }
+  },
+};
