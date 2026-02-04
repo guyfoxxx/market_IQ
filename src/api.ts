@@ -96,9 +96,8 @@ symbol=${symbol}
 
 [OHLC summary]
 ${candleSummary}
-
-در انتها دقیقاً یک بلوک JSON با ```json تولید کن با zones و levels.
-`;
+در انتها دقیقاً یک JSON معتبر تولید کن که شامل zones و levels باشد (بدون کدبلاک).
+;
       const out = await callAI(env, analysisPrompt, { temperature: 0.15 });
       const j = extractJsonBlock(out);
       const zones = normalizeZoneForApi(j?.zones);
