@@ -1,6 +1,29 @@
 import type { Env } from "./env";
 import { verifyInitData } from "./lib/telegramAuth";
-import { ensureUser, getBanner, getPublicWallet, getPromptBase, getPromptVision, getPromptStyle, getUser, listPayments, putUser, setBanner, setPromptBase, setPromptStyle, setPromptVision, setPublicWallet } from "./lib/storage";
+import {
+  ensureUser,
+  getBanner,
+  getPublicWallet,
+  getPromptBase,
+  getPromptVision,
+  getPromptStyle,
+  getUser,
+  listPayments,
+  putUser,
+  setBanner,
+  setPromptBase,
+  setPromptStyle,
+  setPromptVision,
+  setPublicWallet,
+  // Admin prompt management
+  getPromptBaseRaw,
+  getPromptVisionRaw,
+  getPromptStyleRaw,
+  resetPromptBase,
+  resetPromptVision,
+  resetPromptStyle,
+  DEFAULT_STYLE_PROMPTS,
+} from "./lib/storage";
 import { remaining, consume } from "./lib/quota";
 import { escapeHtml, parseIntSafe } from "./lib/utils";
 import { callAI, extractJsonBlock } from "./lib/ai";
@@ -109,6 +132,35 @@ ${candleSummary}
     }
   }
 
+
+
+if (path === "/admin/api/styles") {
+  return json({ ok: true, styles: Object.keys(DEFAULT_STYLE_PROMPTS) });
+}
+
+if (path === "/admin/api/prompt_get") {
+  const body = await req.json().catch(() => ({}));
+  const type = String(body.type || "").trim();
+  if (!type) return json({ ok: false, error: "type required" }, 400);
+  if (type === "base") return json({ ok: true, ...(await getPromptBaseRaw(env)) });
+  if (type === "vision") return json({ ok: true, ...(await getPromptVisionRaw(env)) });
+  if (type.startsWith("style:")) {
+    const style = type.slice("style:".length);
+    return json({ ok: true, ...(await getPromptStyleRaw(env, style)) });
+  }
+  return json({ ok: false, error: "invalid type" }, 400);
+}
+
+if (path === "/admin/api/prompt_reset") {
+  const body = await req.json().catch(() => ({}));
+  const type = String(body.type || "").trim();
+  if (!type) return json({ ok: false, error: "type required" }, 400);
+  if (type === "base") { await resetPromptBase(env); return json({ ok: true }); }
+  if (type === "vision") { await resetPromptVision(env); return json({ ok: true }); }
+  if (type.startsWith("style:")) { await resetPromptStyle(env, type.slice("style:".length)); return json({ ok: true }); }
+  return json({ ok: false, error: "invalid type" }, 400);
+}
+
   return json({ ok: false, error: "not_found" }, 404);
 }
 
@@ -171,6 +223,35 @@ export async function handleAdminApi(req: Request, env: Env): Promise<Response> 
 
     return json({ ok: true });
   }
+
+
+
+if (path === "/admin/api/styles") {
+  return json({ ok: true, styles: Object.keys(DEFAULT_STYLE_PROMPTS) });
+}
+
+if (path === "/admin/api/prompt_get") {
+  const body = await req.json().catch(() => ({}));
+  const type = String(body.type || "").trim();
+  if (!type) return json({ ok: false, error: "type required" }, 400);
+  if (type === "base") return json({ ok: true, ...(await getPromptBaseRaw(env)) });
+  if (type === "vision") return json({ ok: true, ...(await getPromptVisionRaw(env)) });
+  if (type.startsWith("style:")) {
+    const style = type.slice("style:".length);
+    return json({ ok: true, ...(await getPromptStyleRaw(env, style)) });
+  }
+  return json({ ok: false, error: "invalid type" }, 400);
+}
+
+if (path === "/admin/api/prompt_reset") {
+  const body = await req.json().catch(() => ({}));
+  const type = String(body.type || "").trim();
+  if (!type) return json({ ok: false, error: "type required" }, 400);
+  if (type === "base") { await resetPromptBase(env); return json({ ok: true }); }
+  if (type === "vision") { await resetPromptVision(env); return json({ ok: true }); }
+  if (type.startsWith("style:")) { await resetPromptStyle(env, type.slice("style:".length)); return json({ ok: true }); }
+  return json({ ok: false, error: "invalid type" }, 400);
+}
 
   return json({ ok: false, error: "not_found" }, 404);
 }
