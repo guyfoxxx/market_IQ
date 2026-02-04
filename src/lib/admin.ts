@@ -233,6 +233,7 @@ export function adminHtml() {
               <option value="ICT">ICT (Smart Money)</option>
               <option value="ATR">ATR (Volatility)</option>
               <option value="RTM">RTM</option>
+              <option value="DEEP">Deep Style</option>
               <option value="GENERAL">General</option>
             </select>
 

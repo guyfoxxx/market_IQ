@@ -7,6 +7,7 @@ const PHONE_KEY = (phone: string) => `phone:${phone}`;
 const REFCODE_KEY = (code: string) => `refcode:${code}`;
 const PAYMENT_KEY = (txid: string) => `payment:${txid}`;
 const CUSTOMPROMPT_KEY = (userId: number) => `customprompt:${userId}`;
+const WALLETREQ_KEY = (userId: number, id: string) => `walletreq:${userId}:${id}`;
 
 const CONFIG_WALLET = "config:wallet";
 const CONFIG_BANNER = "config:banner";
@@ -215,6 +216,10 @@ export async function getBanner(env: Env): Promise<{ enabled: boolean; text: str
 
 export async function setBanner(env: Env, banner: { enabled: boolean; text: string; url: string }) {
   await env.USERS_KV.put(CONFIG_BANNER, JSON.stringify(banner));
+}
+
+export async function putWalletRequest(env: Env, userId: number, req: { id: string; kind: "deposit" | "withdraw"; amount?: number; createdAt: string }) {
+  await env.USERS_KV.put(WALLETREQ_KEY(userId, req.id), JSON.stringify({ userId, ...req }));
 }
 
 
@@ -439,6 +444,11 @@ Your analysis must include:
 Keep the explanation practical and execution-focused.`,
 
   "RTM": "سبک RTM: تمرکز روی بیس/انگالف/ترپ، نواحی عرضه/تقاضا، ورود از ریفاین.",
+  "DEEP": `Deep Style (Institutional + Multi-timeframe):
+- تحلیل چند‌تایم‌فریم (HTF/MTF/LTF) با تاکید بر روند غالب
+- تشخیص نواحی نقدینگی و پول هوشمند
+- اولویت با ستاپ‌های با احتمال بالا و RR حداقل 1:2
+- در انتها خلاصه اجرایی و سناریوی آلترناتیو`,
   "GENERAL": "تحلیل عمومی: روند، سطوح مهم، سناریوها، ریسک/ریوارد."
 };
 
