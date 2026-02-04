@@ -45,8 +45,15 @@ export interface Env {
   OWNER_ID?: string;
 
   AI_PROVIDER: string;
+  /** Optional comma-separated chain, e.g. "openai,gemini,cloudflare" */
+  AI_CHAIN?: string;
   OPENAI_MODEL: string;
   GEMINI_MODEL: string;
+
+  /** Cloudflare Workers AI binding (Dashboard -> AI -> Bindings) */
+  AI?: any;
+  /** Optional Workers AI model override */
+  CLOUDFLARE_AI_MODEL?: string;
 
   TZ: string;
 }

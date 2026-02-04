@@ -94,8 +94,8 @@ function settingsKb(u: UserProfile) {
     .text("TF: M15", "set:tf:M15").text("TF: H1", "set:tf:H1").row()
     .text("TF: H4", "set:tf:H4").text("TF: D1", "set:tf:D1").row()
     .text("ریسک کم", "set:risk:LOW").text("ریسک متوسط", "set:risk:MEDIUM").text("ریسک زیاد", "set:risk:HIGH").row()
-    .text("GENERAL", "set:style:GENERAL").text("RTM", "set:style:RTM").text("ICT", "set:style:ICT").row()
-    .text("PA", "set:style:PA").text("CUSTOM", "set:style:CUSTOM").row()
+    .text("GENERAL", "set:style:GENERAL").text("PA", "set:style:PA").text("ICT", "set:style:ICT").row()
+    .text("ATR", "set:style:ATR").text("RTM", "set:style:RTM").text("CUSTOM", "set:style:CUSTOM").row()
     .text("News ON", "set:news:ON").text("News OFF", "set:news:OFF").row()
     .text("⬅️ منو", "menu:home");
   return kb;
@@ -142,8 +142,11 @@ export function createBot(env: Env) {
     await next();
   });
 
-  bot.catch((err) => {
+  bot.catch(async (err) => {
     console.log("BOT ERROR", err.error);
+    try {
+      await err.ctx.reply("❌ خطای داخلی رخ داد. لطفاً دوباره تلاش کنید یا /support را بزنید.");
+    } catch {}
   });
 
   // Commands
@@ -253,7 +256,9 @@ ${wallet ?? "❌ ولت تنظیم نشده"}
     const u = requireUser(ctx);
     const txid = (ctx.message?.text ?? "").split(" ").slice(1).join(" ").trim();
     if (!txid || !isValidTxid(txid)) {
-      await ctx.reply(`فرمت TxID معتبر نیست. مثال:\n/tx 0xabc123...`);      return;
+      await ctx.reply(`فرمت TxID معتبر نیست. مثال:
+/tx 0xabc123...`);
+      return;
     }
     const exists = await getPayment(env, txid);
     if (exists) {
@@ -291,15 +296,13 @@ TxID: ${txid}`);
 
   bot.command("wallet", async (ctx) => {
     const wallet = await getPublicWallet(env);
-    await ctx.reply(wallet ? `🏦 آدرس ولت عمومی:
-${wallet}` : "❌ هنوز ولت عمومی تنظیم نشده است.");
+    await ctx.reply(wallet ? `🏦 آدرس ولت عمومی:\n${wallet}` : "❌ هنوز ولت عمومی تنظیم نشده است.");
   });
 
   bot.command("level", async (ctx) => {
     const u = requireUser(ctx);
     await setState(env, u.id, { flow: "level", step: "q1", data: { answers: [] } });
-    await ctx.reply("🧠 آزمون تعیین سطح شروع شد.
-سوال 1/6: هدف اصلی شما از ترید چیست؟ (کوتاه پاسخ بده)");
+    await ctx.reply("🧠 آزمون تعیین سطح شروع شد.\nسوال 1/6: هدف اصلی شما از ترید چیست؟ (کوتاه پاسخ بده)");
   });
 
   bot.command("customprompt", async (ctx) => {
@@ -344,8 +347,10 @@ ${codes}
   });
 
   bot.command(["support", "education"], async (ctx) => {
-    await ctx.reply("🆘 پشتیبانی: پیام خود را ارسال کنید تا به ادمین‌ها فوروارد شود.
-📚 آموزش: به‌زودی ...", { reply_markup: mainMenuKb() });
+    await ctx.reply(
+      "🆘 پشتیبانی: پیام خود را ارسال کنید تا به ادمین‌ها فوروارد شود.\n📚 آموزش: به‌زودی ...",
+      { reply_markup: mainMenuKb() }
+    );
   });
 
   bot.command("payments", async (ctx) => {
@@ -487,8 +492,7 @@ ${ctx.me.username ? `https://<YOUR_WORKER_URL>/admin` : "/admin"}
       }
       if (key === "news") u.settings.news = val as any;
       await putUser(env, u);
-      await ctx.reply("✅ ذخیره شد.
-" + settingsText(u), { reply_markup: settingsKb(u) });
+      await ctx.reply(`✅ ذخیره شد.\n${settingsText(u)}`, { reply_markup: settingsKb(u) });
       return;
     }
 
@@ -580,7 +584,7 @@ ${ctx.me.username ? `https://<YOUR_WORKER_URL>/admin` : "/admin"}
       const prompt = `تو یک مربی ترید هستی. بر اساس پاسخ‌های کاربر سطح او را تعیین کن.
 خروجی دقیقاً شامل دو بخش باشد:
 1) خلاصه ساختاریافته فارسی
-2) یک بلوک JSON (با ```json) با این ساختار:
+2) یک JSON معتبر (بدون کدبلاک/بدون کدبلاک ) با این ساختار:
 { "level": "Beginner|Intermediate|Pro", "summary": "...", "suggestedMarket": "CRYPTO|FOREX|METALS|STOCKS", "suggestedSettings": { "timeframe": "H1", "risk":"MEDIUM", "style":"GENERAL", "news":"OFF" } }
 
 پاسخ‌ها:
@@ -673,7 +677,7 @@ ${candleSummary}
 - پیشنهاد ورود/حدضرر/اهداف (TP1/TP2)
 - مدیریت ریسک (RR پیشنهادی)
 - هشدارها/خبر (اگر news=ON)
-در انتها دقیقاً یک بلوک JSON با ```json تولید کن:
+در انتها دقیقاً یک JSON معتبر (بدون کدبلاک/بدون کدبلاک ) تولید کن:
 {
   "zones":[{"type":"demand","from":0,"to":0,"label":"..."}],
   "levels":{"entry":0,"sl":0,"tp":[0,0]},
