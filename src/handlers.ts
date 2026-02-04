@@ -8,18 +8,46 @@ import { runAnalysis } from './analysis';
 import { getNewsDigest } from './news';
 import { generateText } from './ai';
 
+
+function getBotName(env: any) { return (env?.BOT_NAME || 'Market IQ').trim(); }
 const WELCOME = `سلام! 👋
 به ربات تحلیل/سیگنال خوش اومدی.
 برای شروع چند سوال کوتاه داریم تا پروفایل و تنظیماتت کامل بشه.`;
 
 function mainMenu(baseUrl?: string) {
-  const rows: any[] = [
-    [{ text: '📈 تحلیل / سیگنال', callback_data: 'go:signals' }],
-    [{ text: '⚙️ تنظیمات', callback_data: 'go:settings' }, { text: '👤 پروفایل', callback_data: 'go:profile' }],
-    [{ text: '💳 خرید اشتراک', callback_data: 'go:buy' }, { text: '🎁 رفرال', callback_data: 'go:ref' }],
+  const keyboard: any[][] = [
+    [{ text: '📈 تحلیل/سیگنال' }, { text: '⚙️ تنظیمات' }],
+    [{ text: '👤 پروفایل' }, { text: '💳 خرید اشتراک' }],
+    [{ text: '🎁 رفرال' }, { text: '🧠 تعیین سطح' }],
+    [{ text: '🆘 پشتیبانی' }, { text: '📚 آموزش' }],
   ];
-  if (baseUrl) rows.push([{ text: '🧩 Mini App', web_app: { url: `${baseUrl.replace(/\/$/,'')}/miniapp` } }]);
-  return { inline_keyboard: rows };
+  if (baseUrl) {
+    keyboard.push([{ text: '🧩 Mini App', web_app: { url: `${baseUrl.replace(/\/$/, '')}/miniapp` } }]);
+  } else {
+    keyboard.push([{ text: '🧩 Mini App' }]);
+  }
+  return {
+    keyboard,
+    resize_keyboard: true,
+    is_persistent: true,
+    input_field_placeholder: 'یکی از گزینه‌های منو را انتخاب کن…',
+  };
+}
+
+function mapMenuTextToCommand(t?: string): string | null {
+  const s = (t || '').trim();
+  const m: Record<string, string> = {
+    '⬅️ منو': '/menu',
+    '📈 تحلیل/سیگنال': '/signals',
+    '⚙️ تنظیمات': '/settings',
+    '👤 پروفایل': '/profile',
+    '💳 خرید اشتراک': '/buy',
+    '🎁 رفرال': '/ref',
+    '🧠 تعیین سطح': '/level',
+    '🆘 پشتیبانی': '/support',
+    '📚 آموزش': '/education',
+  };
+  return m[s] || null;
 }
 
 function settingsKeyboard(user: UserProfile) {
@@ -54,6 +82,71 @@ function marketKeyboard(prefix: string) {
       [{ text: '⬅️ بازگشت', callback_data: 'go:menu' }],
     ],
   };
+}
+
+function signalMarketReplyKeyboard() {
+  return {
+    keyboard: [
+      [{ text: 'CRYPTO' }, { text: 'FOREX' }],
+      [{ text: 'METALS' }, { text: 'STOCKS' }],
+      [{ text: '⬅️ منو' }],
+    ],
+    resize_keyboard: true,
+    one_time_keyboard: true,
+    input_field_placeholder: 'بازار را انتخاب کن…',
+  };
+}
+
+function signalSymbolsReplyKeyboard(market: Market) {
+  const rows: any[][] = [];
+  if (market === 'crypto') {
+    rows.push([{ text: 'BTCUSDT' }, { text: 'ETHUSDT' }]);
+    rows.push([{ text: 'SOLUSDT' }, { text: 'BNBUSDT' }]);
+    rows.push([{ text: 'XRPUSDT' }, { text: 'DOGEUSDT' }]);
+    rows.push([{ text: 'TONUSDT' }, { text: 'ADAUSDT' }]);
+  } else if (market === 'forex') {
+    rows.push([{ text: 'EUR/USD' }, { text: 'GBP/USD' }]);
+    rows.push([{ text: 'USD/JPY' }, { text: 'USD/CHF' }]);
+    rows.push([{ text: 'AUD/USD' }, { text: 'USD/CAD' }]);
+    rows.push([{ text: 'NZD/USD' }, { text: 'EUR/JPY' }]);
+  } else if (market === 'metals') {
+    rows.push([{ text: 'XAUUSD' }, { text: 'XAGUSD' }]);
+    rows.push([{ text: 'XAU/EUR' }, { text: 'XAG/EUR' }]);
+  } else {
+    rows.push([{ text: 'AAPL' }, { text: 'TSLA' }]);
+    rows.push([{ text: 'NVDA' }, { text: 'MSFT' }]);
+    rows.push([{ text: 'AMZN' }, { text: 'META' }]);
+    rows.push([{ text: 'GOOGL' }, { text: 'NFLX' }]);
+  }
+  rows.push([{ text: '🔎 نماد دلخواه (تایپ کن)' }]);
+  rows.push([{ text: '⬅️ منو' }]);
+  return {
+    keyboard: rows,
+    resize_keyboard: true,
+    one_time_keyboard: false,
+    input_field_placeholder: 'نماد را انتخاب کن یا تایپ کن…',
+  };
+}
+
+function parseMarketFromText(t: string): Market | null {
+  const s = (t || '').trim().toLowerCase();
+  if (s === 'crypto' || s === 'کریپتو') return 'crypto';
+  if (s === 'forex' || s === 'فارکس') return 'forex';
+  if (s === 'metals' || s === 'فلزات') return 'metals';
+  if (s === 'stocks' || s === 'سهام') return 'stocks';
+  return null;
+}
+
+async function safeEditOrSend(tg: any, chatId: number, messageId: number | undefined, text: string) {
+  if (!messageId) {
+    await tg.sendMessage(chatId, text);
+    return;
+  }
+  try {
+    await tg.editMessageText(chatId, messageId, text);
+  } catch {
+    await tg.sendMessage(chatId, text);
+  }
 }
 
 function timeframeKeyboard() {
@@ -113,15 +206,7 @@ function parseStartRef(args: string[]) {
 }
 
 function shortHtml(s: string) {
-  return String(s ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-async function editOrSend(tg: any, chatId: number, msgId: number | undefined, text: string, opts: any = {}) {
-  if (msgId) return tg.editMessageText(chatId, msgId, text, opts);
-  return tg.sendMessage(chatId, text, opts);
+  return s.replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 export async function handleUpdate(deps: { tg: any; storage: Storage; env: Env }, update: any) {
@@ -141,16 +226,20 @@ export async function handleUpdate(deps: { tg: any; storage: Storage; env: Env }
 
     // Contact shared
     if (msg.contact?.phone_number) {
-      const contactUserId = (msg.contact as any).user_id;
-      if (contactUserId && Number(contactUserId) !== Number(userId)) {
-        await tg.sendMessage(chatId, 'لطفاً فقط شماره خودت را با گزینه Share Contact ارسال کن.');
-        return;
-      }
       await onContact({ tg, storage, env, user, chatId, phone: msg.contact.phone_number });
       return;
     }
 
     const cmd = parseCommand(msg.text);
+
+    // ReplyKeyboard menu taps
+    const mapped = mapMenuTextToCommand(msg.text);
+    if (!cmd && mapped) {
+      await storage.setSession(userId, null);
+      await onCommand({ tg, storage, env, user, chatId, cmd: mapped, args: [], raw: mapped });
+      return;
+    }
+
     if (cmd) {
       await onCommand({ tg, storage, env, user, chatId, cmd: cmd.cmd, args: cmd.args, raw: msg.text });
       return;
@@ -185,40 +274,17 @@ export async function handleUpdate(deps: { tg: any; storage: Storage; env: Env }
 async function onCommand(ctx: { tg: any; storage: Storage; env: Env; user: UserProfile; chatId: number; cmd: string; args: string[]; raw: string }) {
   const { tg, storage, env, user, chatId, cmd, args } = ctx;
 
-  if (cmd === '/start' || cmd === '/menu') {
-    const ref = parseStartRef(args);
-    if (ref) {
-      // store pending ref
-      (user as any).tempPendingRef = ref as any;
-      await storage.putUser(user);
+  if (cmd === '/start') {
+  const botName = getBotName(env);
+  await tg.sendMessage(
+    chatId,
+    `👋 سلام ${shortHtml((user.first_name || user.username || ''))}\nبه ربات <b>${shortHtml(botName)}</b> خوش آمدی.\nاز منوی زیر انتخاب کن:`,
+    { reply_markup: mainMenu(env.PUBLIC_BASE_URL) }
+  );
+  return;
+}
 
-      // اگر کاربر قبلاً شماره ثبت کرده و معرف هنوز ثبت نشده، همینجا تلاش کن رفرال را اعمال کنی
-      if (user.phone && !user.referrerId) {
-        const applied = await tryApplyReferral({ tg, storage, env, user, chatId, refCode: ref });
-        if (applied) {
-          delete (user as any).tempPendingRef;
-          await storage.putUser(user);
-        }
-      }
-    }
-
-    if (!user.name) {
-      await storage.setSession(user.id, { mode: 'onboarding_name' });
-      await tg.sendMessage(chatId, `${WELCOME}
-
-اسم شما چیه؟`, { reply_markup: removeKeyboard() });
-      return;
-    }
-
-    if (!user.phone) {
-      await storage.setSession(user.id, { mode: 'onboarding_contact' });
-      await tg.sendMessage(chatId, 'برای ادامه، شماره‌ات را Share Contact کن:', { reply_markup: contactKeyboard() });
-      return;
-    }
-
-    await tg.sendMessage(chatId, `خوش اومدی ${shortHtml(user.name)} 👋
-
-منوی اصلی:`, { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
+    await tg.sendMessage(chatId, `خوش اومدی ${shortHtml(user.name)} 👋\n\nمنوی اصلی:`, { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
     return;
   }
 
@@ -234,7 +300,7 @@ async function onCommand(ctx: { tg: any; storage: Storage; env: Env; user: UserP
 
   if (cmd === '/signals') {
     await storage.setSession(user.id, { mode: 'signal_market' });
-    await tg.sendMessage(chatId, 'بازار را انتخاب کن:', { reply_markup: marketKeyboard('sig:mkt') });
+    await tg.sendMessage(chatId, 'بازار را انتخاب کن:', { reply_markup: signalMarketReplyKeyboard() });
     return;
   }
 
@@ -260,45 +326,32 @@ async function onCommand(ctx: { tg: any; storage: Storage; env: Env; user: UserP
     const w = await storage.getWalletPublic();
     await tg.sendMessage(chatId, w ? `آدرس ولت عمومی:\n<code>${shortHtml(w)}</code>` : 'ولت عمومی هنوز تنظیم نشده.');
     return;
+
+if (cmd === '/news') {
+  // /news [market] [symbol]
+  // examples:
+  // /news crypto BTCUSDT
+  // /news forex EUR/USD
+  const a0 = (args?.[0] || '').toLowerCase();
+  const a1 = (args?.[1] || '').toUpperCase();
+  let market = (['crypto','forex','metals','stocks'].includes(a0) ? (a0 as any) : null) as any;
+  let symbol = market ? a1 : (args?.[0] || '').toUpperCase();
+
+  if (!symbol) {
+    await tg.sendMessage(chatId, 'فرمت: /news [crypto|forex|metals|stocks] SYMBOL\nمثال: /news crypto BTCUSDT');
+    return;
   }
 
+  if (!market) {
+    market = guessMarketFromSymbol(symbol);
+  }
 
-  if (cmd === '/news') {
-    let market = (args[0] || '').toLowerCase();
-    let symbol = '';
+  const nd = await getNewsDigest({ storage, env, market, symbol, maxItems: 8, cacheTtlSec: 600, summarize: true });
+  await tg.sendMessage(chatId, nd.text);
+  return;
+}
 
-    if (args.length >= 2) {
-      symbol = args[1];
-    } else if (args.length === 1) {
-      // allow: /news BTCUSDT
-      symbol = args[0];
-      market = user.favoriteMarket || 'crypto';
-    } else {
-      await tg.sendMessage(chatId, `فرمت صحیح:
-<code>/news crypto BTCUSDT</code>
-یا
-<code>/news forex EUR/USD</code>`);
-      return;
-    }
 
-    if (!['crypto', 'forex', 'metals', 'stocks'].includes(market)) {
-      market = user.favoriteMarket || 'crypto';
-    }
-
-    symbol = String(symbol || '').trim().toUpperCase();
-    if (!symbol) {
-      await tg.sendMessage(chatId, 'symbol required. مثال: <code>/news crypto BTCUSDT</code>');
-      return;
-    }
-
-    await tg.sendMessage(chatId, 'در حال دریافت خبرها... ⏳');
-    try {
-      const nd = await getNewsDigest({ storage, market: market as any, symbol, maxItems: 6, cacheTtlSec: 600 });
-      await tg.sendMessage(chatId, shortHtml(nd.text || 'خبری پیدا نشد.'));
-    } catch (e: any) {
-      await tg.sendMessage(chatId, `خطا در دریافت خبرها: ${shortHtml(e?.message || String(e))}`);
-    }
-    return;
   }
 
   if (cmd === '/customprompt') {
@@ -345,7 +398,7 @@ async function onCallback(ctx: { tg: any; storage: Storage; env: Env; user: User
   const { tg, storage, env, user, chatId, msgId, data } = ctx;
 
   if (data === 'go:menu') {
-    await editOrSend(tg, chatId, msgId, 'منوی اصلی:', { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
+    await tg.sendMessage(chatId, 'منوی اصلی:', { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
     return;
   }
   if (data === 'go:profile') {
@@ -353,16 +406,16 @@ async function onCallback(ctx: { tg: any; storage: Storage; env: Env; user: User
     return;
   }
   if (data === 'go:settings') {
-    await editOrSend(tg, chatId, msgId, 'تنظیمات فعلی:', { reply_markup: settingsKeyboard(user) });
+    await tg.editMessageText(chatId, msgId!, 'تنظیمات فعلی:', { reply_markup: settingsKeyboard(user) });
     return;
   }
   if (data === 'go:signals') {
     await storage.setSession(user.id, { mode: 'signal_market' });
-    await editOrSend(tg, chatId, msgId, 'بازار را انتخاب کن:', { reply_markup: marketKeyboard('sig:mkt') });
+    await tg.sendMessage(chatId, 'بازار را انتخاب کن:', { reply_markup: signalMarketReplyKeyboard() });
     return;
   }
   if (data === 'go:buy') {
-    await editOrSend(tg, chatId, msgId, `برای خرید اشتراک:\n\n1) مبلغ <b>${storage.subPrice}</b> USDT ارسال کن\n2) سپس <code>/tx YOUR_TXID</code>\n\nمدت اشتراک: <b>${storage.subDays}</b> روز`, { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
+    await tg.sendMessage(chatId, `برای خرید اشتراک:\n\n1) مبلغ <b>${storage.subPrice}</b> USDT ارسال کن\n2) سپس <code>/tx YOUR_TXID</code>\n\nمدت اشتراک: <b>${storage.subDays}</b> روز`, { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
     return;
   }
   if (data === 'go:ref') {
@@ -376,63 +429,63 @@ async function onCallback(ctx: { tg: any; storage: Storage; env: Env; user: User
     user.experience = data.split(':')[2] as any;
     await storage.putUser(user);
     await storage.setSession(user.id, { mode: 'onboarding_market' });
-    await editOrSend(tg, chatId, msgId, 'بازار مورد علاقه‌ات کدام است؟', { reply_markup: marketKeyboard('on:mkt') });
+    await tg.editMessageText(chatId, msgId!, 'بازار مورد علاقه‌ات کدام است؟', { reply_markup: marketKeyboard('on:mkt') });
     return;
   }
   if (data.startsWith('on:mkt:')) {
     user.favoriteMarket = data.split(':')[2] as any;
     await storage.putUser(user);
     await storage.setSession(user.id, { mode: 'onboarding_timeframe' });
-    await editOrSend(tg, chatId, msgId, 'تایم‌فریم پیش‌فرض:', { reply_markup: timeframeKeyboard() });
+    await tg.editMessageText(chatId, msgId!, 'تایم‌فریم پیش‌فرض:', { reply_markup: timeframeKeyboard() });
     return;
   }
   if (data.startsWith('on:tf:')) {
     user.settings.timeframe = data.split(':')[2];
     await storage.putUser(user);
     await storage.setSession(user.id, { mode: 'onboarding_risk' });
-    await editOrSend(tg, chatId, msgId, 'ریسک پیش‌فرض:', { reply_markup: riskKeyboard() });
+    await tg.editMessageText(chatId, msgId!, 'ریسک پیش‌فرض:', { reply_markup: riskKeyboard() });
     return;
   }
   if (data.startsWith('on:risk:')) {
     user.settings.risk = data.split(':')[2] as any;
     await storage.putUser(user);
     await storage.setSession(user.id, { mode: 'onboarding_style' });
-    await editOrSend(tg, chatId, msgId, 'سبک معامله:', { reply_markup: styleKeyboard(user) });
+    await tg.editMessageText(chatId, msgId!, 'سبک معامله:', { reply_markup: styleKeyboard(user) });
     return;
   }
   if (data.startsWith('on:style:')) {
     user.settings.style = data.split(':')[2] as any;
     await storage.putUser(user);
     await storage.setSession(user.id, { mode: 'onboarding_news' });
-    await editOrSend(tg, chatId, msgId, 'بخش خبر فعال باشد؟', { reply_markup: newsKeyboard() });
+    await tg.editMessageText(chatId, msgId!, 'بخش خبر فعال باشد؟', { reply_markup: newsKeyboard() });
     return;
   }
   if (data.startsWith('on:news:')) {
     user.settings.news = data.split(':')[2] === 'true';
     await storage.putUser(user);
     await storage.setSession(user.id, null);
-    await editOrSend(tg, chatId, msgId, 'پروفایل شما کامل شد ✅\n\nمنوی اصلی:', { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
+    await tg.editMessageText(chatId, msgId!, 'پروفایل شما کامل شد ✅\n\nمنوی اصلی:', { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
     return;
   }
 
   // settings
   if (data === 'set:tf') {
-    await editOrSend(tg, chatId, msgId, 'تایم‌فریم را انتخاب کن:', { reply_markup: timeframeKeyboard() });
+    await tg.editMessageText(chatId, msgId!, 'تایم‌فریم را انتخاب کن:', { reply_markup: timeframeKeyboard() });
     await storage.setSession(user.id, { mode: 'onboarding_timeframe' }); // reuse
     return;
   }
   if (data === 'set:risk') {
-    await editOrSend(tg, chatId, msgId, 'ریسک را انتخاب کن:', { reply_markup: riskKeyboard() });
+    await tg.editMessageText(chatId, msgId!, 'ریسک را انتخاب کن:', { reply_markup: riskKeyboard() });
     await storage.setSession(user.id, { mode: 'onboarding_risk' });
     return;
   }
   if (data === 'set:style') {
-    await editOrSend(tg, chatId, msgId, 'سبک را انتخاب کن:', { reply_markup: styleKeyboard(user) });
+    await tg.editMessageText(chatId, msgId!, 'سبک را انتخاب کن:', { reply_markup: styleKeyboard(user) });
     await storage.setSession(user.id, { mode: 'onboarding_style' });
     return;
   }
   if (data === 'set:news') {
-    await editOrSend(tg, chatId, msgId, 'خبر را روشن/خاموش کن:', { reply_markup: newsKeyboard() });
+    await tg.editMessageText(chatId, msgId!, 'خبر را روشن/خاموش کن:', { reply_markup: newsKeyboard() });
     await storage.setSession(user.id, { mode: 'onboarding_news' });
     return;
   }
@@ -441,14 +494,9 @@ async function onCallback(ctx: { tg: any; storage: Storage; env: Env; user: User
   if (data.startsWith('sig:mkt:')) {
     const market = data.split(':')[2] as Market;
     await storage.setSession(user.id, { mode: 'signal_symbol', temp: { market } });
-    await editOrSend(tg, chatId, msgId, `نماد را ارسال کن (Market: ${market}).\nمثال: BTCUSDT یا EUR/USD یا XAUUSD یا AAPL`);
+    await tg.sendMessage(chatId, `بازار انتخاب شد: ${market.toUpperCase()}\nنماد را انتخاب کن یا تایپ کن:`, { reply_markup: signalSymbolsReplyKeyboard(market) });
     return;
   }
-
-  // Fallback for unexpected session states
-  await storage.setSession(user.id, null);
-  await tg.sendMessage(chatId, 'از منو استفاده کن یا /menu بزن 🙂', { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
-
 }
 
 async function onSessionText(ctx: { tg: any; storage: Storage; env: Env; user: UserProfile; chatId: number; session: SessionState; text: string }) {
@@ -462,81 +510,77 @@ async function onSessionText(ctx: { tg: any; storage: Storage; env: Env; user: U
     return;
   }
 
-
-  if (session.mode === 'onboarding_contact') {
-    await tg.sendMessage(chatId, 'برای ادامه، شماره‌ات را Share Contact کن:', { reply_markup: contactKeyboard() });
+if (session.mode === 'signal_market') {
+  if ((text || '').trim() === '⬅️ منو') {
+    await storage.setSession(user.id, null);
+    await tg.sendMessage(chatId, 'منوی اصلی:', { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
     return;
   }
-
-  if (session.mode === 'onboarding_experience') {
-    await tg.sendMessage(chatId, 'سطح تجربه‌ات در بازار؟', { reply_markup: experienceKeyboard() });
+  const market = parseMarketFromText(text);
+  if (!market) {
+    await tg.sendMessage(chatId, 'بازار نامعتبر است. یکی از گزینه‌ها را انتخاب کن:', { reply_markup: signalMarketReplyKeyboard() });
     return;
   }
-
-  if (session.mode === 'onboarding_market') {
-    await tg.sendMessage(chatId, 'بازار مورد علاقه‌ات؟', { reply_markup: marketKeyboard('on:mkt') });
-    return;
-  }
-
-  if (session.mode === 'onboarding_timeframe') {
-    await tg.sendMessage(chatId, 'تایم‌فریم را انتخاب کن:', { reply_markup: timeframeKeyboard() });
-    return;
-  }
-
-  if (session.mode === 'onboarding_risk') {
-    await tg.sendMessage(chatId, 'سطح ریسک را انتخاب کن:', { reply_markup: riskKeyboard() });
-    return;
-  }
-
-  if (session.mode === 'onboarding_style') {
-    await tg.sendMessage(chatId, 'سبک تحلیل را انتخاب کن:', { reply_markup: styleKeyboard(user) });
-    return;
-  }
-
-  if (session.mode === 'onboarding_news') {
-    await tg.sendMessage(chatId, 'خبرهای مرتبط را فعال کنم؟', { reply_markup: newsKeyboard() });
-    return;
-  }
-
-  if (session.mode === 'signal_market') {
-    const t = (text || '').trim().toLowerCase();
-    let market: any = null;
-    if (['crypto', 'کریپتو'].some(x => t.includes(x))) market = 'crypto';
-    else if (['forex', 'فارکس'].some(x => t.includes(x))) market = 'forex';
-    else if (['metals', 'metal', 'فلز'].some(x => t.includes(x))) market = 'metals';
-    else if (['stocks', 'stock', 'سهام'].some(x => t.includes(x))) market = 'stocks';
-
-    if (!market) {
-      await tg.sendMessage(chatId, 'بازار را از دکمه‌ها انتخاب کن:', { reply_markup: marketKeyboard('sig:mkt') });
-      return;
-    }
-
-    await storage.setSession(user.id, { mode: 'signal_symbol', temp: { market } });
-    await tg.sendMessage(chatId, 'نماد را ارسال کن (مثال: BTCUSDT / EUR/USD / XAUUSD / AAPL)');
-    return;
-  }
+  await storage.setSession(user.id, { mode: 'signal_symbol', temp: { market } });
+  await tg.sendMessage(chatId, `بازار انتخاب شد: ${market.toUpperCase()}\nحالا نماد را انتخاب کن یا تایپ کن:`, { reply_markup: signalSymbolsReplyKeyboard(market) });
+  return;
+}
 
   if (session.mode === 'signal_symbol') {
-    const symbol = (text || '').trim().toUpperCase();
-    if (!symbol) {
-      await tg.sendMessage(chatId, 'نماد خالیه. لطفاً یک نماد معتبر بفرست (مثال: BTCUSDT).');
-      return;
-    }
+  const market: Market = session.temp?.market;
+  const raw = (text || '').trim();
 
-    const market: Market | undefined = session.temp?.market;
-    if (!market) {
-      await storage.setSession(user.id, { mode: 'signal_market' });
-      await tg.sendMessage(chatId, 'بازار انتخاب نشده. لطفاً از دکمه‌ها بازار را انتخاب کن:', { reply_markup: marketKeyboard('sig:mkt') });
-      return;
-    }
-
+  if (raw === '⬅️ منو') {
     await storage.setSession(user.id, null);
+    await tg.sendMessage(chatId, 'منوی اصلی:', { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
+    return;
+  }
 
-    const quota = await checkAndConsume(storage as any, env, user, true);
-    if (!quota.allowed) {
-      await tg.sendMessage(chatId, `${quota.reason}\nباقی‌مانده امروز: ${quota.remainingDaily} | این ماه: ${quota.remainingMonthly}`);
-      return;
-    }
+  if (raw.startsWith('🔎')) {
+    await tg.sendMessage(chatId, 'نماد دلخواه را تایپ کن (مثال: BTCUSDT یا EUR/USD یا XAUUSD یا AAPL).', { reply_markup: signalSymbolsReplyKeyboard(market) });
+    return;
+  }
+
+  const symbol = raw.toUpperCase();
+  await storage.setSession(user.id, null);
+
+  const quota = await checkAndConsume(storage as any, env, user, true);
+  if (!quota.allowed) {
+    await tg.sendMessage(chatId, `${quota.reason}\nباقی‌مانده امروز: ${quota.remainingDaily} | این ماه: ${quota.remainingMonthly}`, { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
+    return;
+  }
+
+  // پیام اولیه و گرفتن message_id برای edit
+  const m0 = await tg.sendMessage(chatId, `⏳ 1/3 دریافت دیتا برای <b>${symbol}</b> ...`, { reply_markup: signalSymbolsReplyKeyboard(market) });
+  const progressMsgId = m0?.message_id;
+
+  try {
+    const tf = user.settings.timeframe;
+
+    // 1/3 دریافت دیتا
+    const candles = await fetchCandles(env as any, market, symbol, tf);
+
+    await safeEditOrSend(tg, chatId, progressMsgId, `🤖 2/3 تحلیل ${symbol} ...`);
+
+    // 2/3 تحلیل
+    const last = candles.slice(-20);
+    const candlesSummary = last.map(c => `${new Date(c.x).toISOString().slice(0,16)} o:${c.o} h:${c.h} l:${c.l} c:${c.c}`).join(' | ');
+    const analysis = await runAnalysis({ env, storage, user, market, symbol, timeframe: tf, candlesSummary });
+
+    await safeEditOrSend(tg, chatId, progressMsgId, `🖼️ 3/3 رسم چارت و زون‌ها ...`);
+
+    // 3/3 چارت
+    const png = await renderChartPng({ symbol, candles, zones: analysis.zones });
+
+    await tg.sendMessage(chatId, analysis.text, { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
+    await tg.sendPhoto(chatId, png, `چارت ${symbol} با زون‌ها`, { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
+
+    await safeEditOrSend(tg, chatId, progressMsgId, `✅ انجام شد: ${symbol}`);
+  } catch (e: any) {
+    await safeEditOrSend(tg, chatId, progressMsgId, `❌ خطا: ${shortHtml(e?.message || String(e))}`);
+  }
+  return;
+}
 
     await tg.sendMessage(chatId, `در حال دریافت دیتا و تحلیل ${symbol} ... ⏳`);
 
@@ -548,15 +592,15 @@ async function onSessionText(ctx: { tg: any; storage: Storage; env: Env; user: U
 
       let newsDigest: string | undefined;
       if (user.settings.news) {
-        const nd = await getNewsDigest({ storage, market, symbol, maxItems: 5, cacheTtlSec: 600 });
+        const nd = await getNewsDigest({ storage, env, market, symbol, maxItems: 5, cacheTtlSec: 600 });
         newsDigest = nd.text;
       }
 
       const analysis = await runAnalysis({ env, storage, user, market, symbol, timeframe: tf, candlesSummary, newsDigest });
       const png = await renderChartPng({ symbol, candles, zones: analysis.zones });
 
-      await tg.sendMessage(chatId, shortHtml(analysis.text));
-      if (newsDigest) await tg.sendMessage(chatId, shortHtml(newsDigest));
+      await tg.sendMessage(chatId, analysis.text);
+      if (newsDigest) await tg.sendMessage(chatId, newsDigest);
       await tg.sendPhoto(chatId, png, `چارت ${symbol} با زون‌ها`);
     } catch (e: any) {
       await tg.sendMessage(chatId, `خطا در تحلیل: ${shortHtml(e?.message || String(e))}`);
@@ -588,34 +632,6 @@ async function onSessionText(ctx: { tg: any; storage: Storage; env: Env; user: U
   }
 }
 
-
-async function tryApplyReferral(ctx: { tg: any; storage: Storage; env: Env; user: UserProfile; chatId: number; refCode: string }): Promise<boolean> {
-  const { tg, storage, env, user, chatId, refCode } = ctx;
-  try {
-    const referrerIdStr = await env.DB.get(`ref:${refCode}`);
-    const referrerId = referrerIdStr ? Number(referrerIdStr) : null;
-    if (!referrerId || referrerId === user.id) return false;
-    if (user.referrerId) return false;
-
-    user.referrerId = referrerId;
-    await storage.putUser(user);
-
-    const refUser = await storage.ensureUser(referrerId);
-    refUser.successfulInvites += 1;
-    refUser.points += storage.refPointsPerInvite;
-    refUser.commissionPct = Math.min(storage.refCommissionMaxPct, refUser.successfulInvites * storage.refCommissionStepPct);
-    await storage.putUser(refUser);
-
-    await tg.sendMessage(chatId, 'رفرال ثبت شد ✅');
-    await tg.sendMessage(referrerId, `🎉 یک دعوت موفق ثبت شد!
-امتیاز +${storage.refPointsPerInvite}
-درصد کمیسیون فعلی: ${refUser.commissionPct}%`);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 async function onContact(ctx: { tg: any; storage: Storage; env: Env; user: UserProfile; chatId: number; phone: string }) {
   const { tg, storage, env, user, chatId, phone } = ctx;
 
@@ -632,18 +648,32 @@ async function onContact(ctx: { tg: any; storage: Storage; env: Env; user: UserP
   // accept referral if pending and contact shared and phone unique
   const pendingRef = (user as any).tempPendingRef;
   if (pendingRef) {
-    const applied = await tryApplyReferral({ tg, storage, env, user, chatId, refCode: pendingRef });
+    const referrerIdStr = await env.DB.get(`ref:${pendingRef}`);
+    const referrerId = referrerIdStr ? Number(referrerIdStr) : null;
+    if (referrerId && referrerId !== user.id) {
+      // only if user had no referrer yet
+      if (!user.referrerId) {
+        user.referrerId = referrerId;
+        await storage.putUser(user);
+
+        // award referrer points, increment invites, update commission pct
+        const refUser = await storage.ensureUser(referrerId);
+        refUser.successfulInvites += 1;
+        refUser.points += storage.refPointsPerInvite;
+        refUser.commissionPct = Math.min(storage.refCommissionMaxPct, refUser.successfulInvites * storage.refCommissionStepPct);
+        await storage.putUser(refUser);
+
+        await tg.sendMessage(chatId, 'رفرال ثبت شد ✅');
+        await tg.sendMessage(referrerId, `🎉 یک دعوت موفق ثبت شد!\nامتیاز +${storage.refPointsPerInvite}\nدرصد کمیسیون فعلی: ${refUser.commissionPct}%`);
+      }
+    }
     delete (user as any).tempPendingRef;
     await storage.putUser(user);
-    if (applied) {
-      // nothing else
-    }
   }
 
   await storage.setSession(user.id, { mode: 'onboarding_experience' });
-  await tg.sendMessage(chatId, 'شماره ذخیره شد ✅', { reply_markup: removeKeyboard() });
-  await tg.sendMessage(chatId, 'سطح تجربه‌ات در بازار؟', { reply_markup: experienceKeyboard() });
-  // menu will be shown after onboarding completes
+  await tg.sendMessage(chatId, 'شماره ذخیره شد ✅\nسطح تجربه‌ات در بازار؟', { reply_markup: experienceKeyboard() });
+  await tg.sendMessage(chatId, 'منو:', { reply_markup: mainMenu(env.PUBLIC_BASE_URL) });
 }
 
 async function sendProfile(ctx: { tg: any; storage: Storage; env: Env; user: UserProfile; chatId: number }) {
@@ -881,4 +911,13 @@ async function notifyAdmins(storage: Storage, tg: any, text: string) {
   for (const id of targets) {
     try { await tg.sendMessage(id, text); } catch {}
   }
+}
+
+
+function guessMarketFromSymbol(symbol: string): any {
+  const s = String(symbol || '').toUpperCase();
+  if (s.includes('USDT') || s.includes('USDC') || s.includes('-USD')) return 'crypto';
+  if (s.includes('/') || /^[A-Z]{6}(=X)?$/.test(s)) return 'forex';
+  if (s.startsWith('XAU') || s.startsWith('XAG')) return 'metals';
+  return 'stocks';
 }

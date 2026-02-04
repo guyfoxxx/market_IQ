@@ -2,7 +2,7 @@
  * Verify Telegram WebApp initData according to Telegram docs:
  * https://core.telegram.org/bots/webapps#validating-data-received-via-the-web-app
  *
- * This function returns parsed data if valid; otherwise null.
+ * Returns parsed data if valid; otherwise null.
  */
 export async function verifyWebAppInitData(initData: string, botToken: string): Promise<Record<string, any> | null> {
   try {
@@ -11,14 +11,13 @@ export async function verifyWebAppInitData(initData: string, botToken: string): 
     if (!hash) return null;
     params.delete('hash');
 
-    // URLSearchParams typing differs across TS libs; build a typed entries array via forEach
-    const entries: Array<[string, string]> = [];
-    params.forEach((value, key) => entries.push([key, value]));
+    const pairs: Array<[string, string]> = [];
+    params.forEach((value, key) => {
+      pairs.push([key, value]);
+    });
 
-    const dataCheckString = entries
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([k, v]) => `${k}=${v}`)
-      .join('\n');
+    pairs.sort((a, b) => a[0].localeCompare(b[0]));
+    const dataCheckString = pairs.map(([k, v]) => `${k}=${v}`).join('\n');
 
     // secret_key = HMAC_SHA256("WebAppData", bot_token)
     const enc = new TextEncoder();
@@ -29,6 +28,7 @@ export async function verifyWebAppInitData(initData: string, botToken: string): 
       false,
       ['sign'],
     );
+
     const secretKey = await crypto.subtle.sign('HMAC', keyMaterial, enc.encode(botToken));
     const cryptoKey = await crypto.subtle.importKey(
       'raw',
@@ -37,12 +37,13 @@ export async function verifyWebAppInitData(initData: string, botToken: string): 
       false,
       ['sign'],
     );
+
     const sig = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(dataCheckString));
     const sigHex = buf2hex(sig);
     if (sigHex !== hash) return null;
 
     const out: Record<string, any> = {};
-    for (const [k, v] of entries) {
+    for (const [k, v] of pairs) {
       try {
         out[k] = k === 'user' ? JSON.parse(v) : v;
       } catch {

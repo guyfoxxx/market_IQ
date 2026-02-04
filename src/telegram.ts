@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from './utils';
 export type TgReplyMarkup = Record<string, any> | undefined;
 
 export class Telegram {
@@ -8,19 +9,19 @@ export class Telegram {
   }
 
   async callJson(method: string, payload: any) {
-    const res = await fetch(this.api(method), {
+    const res = await fetchWithTimeout(this.api(method), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
-    });
-    const data = (await res.json()) as any;
+    }, 8_000);
+    const data = await res.json() as any;
     if (!data?.ok) throw new Error(`Telegram API error: ${method} -> ${JSON.stringify(data)}`);
     return data.result;
   }
 
   async callForm(method: string, form: FormData) {
-    const res = await fetch(this.api(method), { method: 'POST', body: form });
-    const data = (await res.json()) as any;
+    const res = await fetchWithTimeout(this.api(method), { method: 'POST', body: form }, 8_000);
+    const data = await res.json() as any;
     if (!data?.ok) throw new Error(`Telegram API error: ${method} -> ${JSON.stringify(data)}`);
     return data.result;
   }

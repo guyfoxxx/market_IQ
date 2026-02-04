@@ -201,7 +201,7 @@ export class Storage {
 
   // ---- generic cache helpers (KV) ----
   async cacheGet<T>(key: string): Promise<T | null> {
-    const v = await this.env.DB.get(key, 'json');
+    const v = await this.env.DB.get(key, { type: 'json' });
     return (v as any) ?? null;
   }
 

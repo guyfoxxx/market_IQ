@@ -120,7 +120,7 @@ ${opts.newsDigest}`
 ریسک کاربر: ${opts.user.settings.risk}
 خلاصه دیتا (OHLC): ${opts.candlesSummary}${newsPart}
 
-	${userPromptPieces.join('\n\n')}
+${userPromptPieces.join('\n\n')}
 
 الان تحلیل را طبق قالب بده و در انتها JSON سختگیرانه zones را قرار بده.`;
   const system = `${base}\n\n---\nسبک/استراتژی:\n${perStyle}`;
@@ -160,44 +160,49 @@ export function extractZones(text: string): Zone[] {
   return extractZonesDetailed(text).zones;
 }
 
-export function extractZonesDetailed(text: string): { zones: Zone[]; hadJson: boolean; parseOk: boolean } {
+export function extractZonesDetailed(text: string): { zones: Zone[]; hadJson: boolean; parseOk: boolean; schemaOk: boolean } {
   const jsonCandidate = findLastJsonCandidate(text);
-  if (!jsonCandidate) return { zones: [], hadJson: false, parseOk: false };
+  if (!jsonCandidate) return { zones: [], hadJson: false, parseOk: false, schemaOk: false };
 
-  // اگر کاندید از داخل بلاک json آمده، hadJson=true؛ اگر کل متن بود هم true در نظر می‌گیریم
   const hadJson = true;
 
   let obj: any;
   try {
     obj = JSON.parse(jsonCandidate);
   } catch {
-    return { zones: [], hadJson, parseOk: false };
+    return { zones: [], hadJson, parseOk: false, schemaOk: false };
   }
 
+  const schemaOk = obj?.schema_version === 'zones_v1';
   const zonesRaw = Array.isArray(obj?.zones) ? obj.zones : [];
+
   const zones: Zone[] = zonesRaw
+    .slice(0, 12)
     .map((z: any, i: number) => {
       const kind = z?.kind === 'supply' ? 'supply' : z?.kind === 'demand' ? 'demand' : null;
       const from = Number(z?.price_from ?? z?.from);
       const to = Number(z?.price_to ?? z?.to);
+      const conf = z?.confidence;
       if (!kind || !Number.isFinite(from) || !Number.isFinite(to)) return null;
 
       let a = from;
       let b = to;
       if (a === b) return null;
-      if (a > b) {
-        const t = a;
-        a = b;
-        b = t;
-      }
+      if (a > b) [a, b] = [b, a];
 
       if (a <= 0 || b <= 0) return null;
 
+      // confidence optional but if provided must be 0..1
+      if (conf !== undefined) {
+        const c = Number(conf);
+        if (!Number.isFinite(c) || c < 0 || c > 1) return null;
+      }
+
       const labelBase =
-        typeof z?.label === 'string'
-          ? z.label
-          : typeof z?.id === 'string'
-            ? z.id
+        typeof z?.id === 'string'
+          ? z.id
+          : typeof z?.label === 'string'
+            ? z.label
             : typeof z?.rationale === 'string'
               ? z.rationale
               : `Z${i + 1}`;
@@ -211,7 +216,11 @@ export function extractZonesDetailed(text: string): { zones: Zone[]; hadJson: bo
     })
     .filter(Boolean) as Zone[];
 
-  return { zones, hadJson, parseOk: true };
+  // سختگیرانه: 1..8 زون
+  const finalZones = zones.slice(0, 8);
+  const strictOk = schemaOk && finalZones.length >= 1 && finalZones.length <= 8;
+
+  return { zones: finalZones, hadJson, parseOk: true, schemaOk: strictOk };
 }
 
 function findLastJsonCandidate(text: string): string | null {

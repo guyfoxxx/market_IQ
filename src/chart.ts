@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from './utils';
 import type { Candle } from './data/types';
 import type { Zone } from './analysis';
 import { clamp } from './utils';
@@ -64,11 +65,11 @@ export async function renderChartPng(opts: {
     chart: config,
   };
 
-  const res = await fetch('https://quickchart.io/chart', {
+  const res = await fetchWithTimeout('https://quickchart.io/chart', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
-  });
+  }, 12_000);
   if (!res.ok) throw new Error(`QuickChart error: ${res.status} ${await res.text()}`);
   return await res.arrayBuffer();
 }
