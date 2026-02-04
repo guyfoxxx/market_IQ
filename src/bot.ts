@@ -26,7 +26,7 @@ import {
   setPromptBase,
   setPromptStyle,
   setPromptVision,
-  setPublicWallet,,
+  setPublicWallet,
   setSelectedPlan,
   getPlans
 
