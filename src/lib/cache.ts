@@ -11,17 +11,10 @@ export function analysisCacheKey(args: {
   tf: string;
   style: string;
   risk: string;
-<<<<<<< HEAD
-  news: boolean;
-}) {
-  const sym = args.symbol.trim().toUpperCase();
-  const n = args.news ? "1" : "0";
-=======
   news: "ON" | "OFF";
 }) {
   const sym = args.symbol.trim().toUpperCase();
   const n = args.news === "ON" ? "1" : "0";
->>>>>>> e15cf79 (first commit)
   return `cache:analysis:${args.market}:${sym}:${args.tf}:${args.style}:${args.risk}:${n}`;
 }
 
