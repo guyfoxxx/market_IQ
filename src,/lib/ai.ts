@@ -39,8 +39,7 @@ async function callOpenAIResponses(env: Env, prompt: string, opts?: { temperatur
       if (c.type === "output_text" && typeof c.text === "string") parts.push(c.text);
     }
   }
-  const text = parts.join("
-").trim();
+  const text = parts.join("\n").trim();
   if (!text) throw new Error("OpenAI returned empty output");
   return text;
 }
@@ -64,8 +63,7 @@ async function callGemini(env: Env, prompt: string): Promise<string> {
     throw new Error(`Gemini error: ${res.status} ${t}`);
   }
   const data = await res.json() as any;
-  const text = data?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).filter(Boolean).join("
-") ?? "";
+  const text = data?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).filter(Boolean).join("\n") ?? "";
   if (!text.trim()) throw new Error("Gemini returned empty output");
   return text.trim();
 }

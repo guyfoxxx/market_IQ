@@ -97,7 +97,7 @@ symbol=${symbol}
 [OHLC summary]
 ${candleSummary}
 
-در انتها دقیقاً یک بلوک JSON با ```json تولید کن با zones و levels.
+در انتها دقیقاً یک بلوک JSON با \`\`\`json تولید کن با zones و levels.
 `;
       const out = await callAI(env, analysisPrompt, { temperature: 0.15 });
       const j = extractJsonBlock(out);

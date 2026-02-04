@@ -254,8 +254,7 @@ ${wallet ?? "❌ ولت تنظیم نشده"}
     const u = requireUser(ctx);
     const txid = (ctx.message?.text ?? "").split(" ").slice(1).join(" ").trim();
     if (!txid || !isValidTxid(txid)) {
-      await ctx.reply("فرمت TxID معتبر نیست. مثال:
-/tx 0xabc123...");
+      await ctx.reply("فرمت TxID معتبر نیست. مثال:\n/tx 0xabc123...");
       return;
     }
     const exists = await getPayment(env, txid);
@@ -301,8 +300,7 @@ ${wallet}` : "❌ هنوز ولت عمومی تنظیم نشده است.");
   bot.command("level", async (ctx) => {
     const u = requireUser(ctx);
     await setState(env, u.id, { flow: "level", step: "q1", data: { answers: [] } });
-    await ctx.reply("🧠 آزمون تعیین سطح شروع شد.
-سوال 1/6: هدف اصلی شما از ترید چیست؟ (کوتاه پاسخ بده)");
+    await ctx.reply("🧠 آزمون تعیین سطح شروع شد.\nسوال 1/6: هدف اصلی شما از ترید چیست؟ (کوتاه پاسخ بده)");
   });
 
   bot.command("customprompt", async (ctx) => {
@@ -347,8 +345,7 @@ ${codes}
   });
 
   bot.command(["support", "education"], async (ctx) => {
-    await ctx.reply("🆘 پشتیبانی: پیام خود را ارسال کنید تا به ادمین‌ها فوروارد شود.
-📚 آموزش: به‌زودی ...", { reply_markup: mainMenuKb() });
+    await ctx.reply("🆘 پشتیبانی: پیام خود را ارسال کنید تا به ادمین‌ها فوروارد شود.\n📚 آموزش: به‌زودی ...", { reply_markup: mainMenuKb() });
   });
 
   bot.command("verify", async (ctx) => {
@@ -371,8 +368,7 @@ ${codes}
         (r.reason ? `Reason: ${r.reason}\n` : "");
       await ctx.reply(txt);
       if (r.ok) {
-        await ctx.reply("اگر می‌خواهید تایید شود:
-/approve " + txid);
+        await ctx.reply("اگر می‌خواهید تایید شود:\n/approve " + txid);
       }
     } catch (e: any) {
       await ctx.reply("❌ خطا در verify: " + (e?.message ?? "unknown"));
@@ -518,8 +514,7 @@ ${ctx.me.username ? `https://<YOUR_WORKER_URL>/admin` : "/admin"}
       }
       if (key === "news") u.settings.news = val as any;
       await putUser(env, u);
-      await ctx.reply("✅ ذخیره شد.
-" + settingsText(u), { reply_markup: settingsKb(u) });
+      await ctx.reply("✅ ذخیره شد.\n" + settingsText(u), { reply_markup: settingsKb(u) });
       return;
     }
 
@@ -611,7 +606,7 @@ ${ctx.me.username ? `https://<YOUR_WORKER_URL>/admin` : "/admin"}
       const prompt = `تو یک مربی ترید هستی. بر اساس پاسخ‌های کاربر سطح او را تعیین کن.
 خروجی دقیقاً شامل دو بخش باشد:
 1) خلاصه ساختاریافته فارسی
-2) یک بلوک JSON (با ```json) با این ساختار:
+2) یک بلوک JSON (با \`\`\`json) با این ساختار:
 { "level": "Beginner|Intermediate|Pro", "summary": "...", "suggestedMarket": "CRYPTO|FOREX|METALS|STOCKS", "suggestedSettings": { "timeframe": "H1", "risk":"MEDIUM", "style":"GENERAL", "news":"OFF" } }
 
 پاسخ‌ها:
@@ -704,7 +699,7 @@ ${candleSummary}
 - پیشنهاد ورود/حدضرر/اهداف (TP1/TP2)
 - مدیریت ریسک (RR پیشنهادی)
 - هشدارها/خبر (اگر news=ON)
-در انتها دقیقاً یک بلوک JSON با ```json تولید کن:
+در انتها دقیقاً یک بلوک JSON با \`\`\`json تولید کن:
 {
   "zones":[{"type":"demand","from":0,"to":0,"label":"..."}],
   "levels":{"entry":0,"sl":0,"tp":[0,0]},
