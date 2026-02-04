@@ -139,11 +139,11 @@ async function safeEdit(ctx: any, text: string, extra: any = {}) {
 }
 
 async function showMenu(ctx: any, env: Env) {
-  const u = await ensureUser(env, {
-    id: ctx.from!.id,
-    username: ctx.from!.username,
-    firstName: ctx.from!.first_name,
-  });
+   const u = await ensureUser(env, ctx.from!);
+   await ensureQuotaReset(env, u);
+
+   const text =
+     `Market IQ ✅\n\n` +
 
   await ensureQuotaReset(env, u);
 
