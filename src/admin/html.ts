@@ -4,7 +4,7 @@ export function adminHtml() {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Admin Panel</title>
+  <title>Market IQ — Admin Panel</title>
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #0b1220; color: #e9eef9; margin: 0; }
     header { padding: 16px 20px; background: #111a2e; border-bottom: 1px solid #223055; }
