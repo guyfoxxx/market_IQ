@@ -17,6 +17,7 @@ import {
   setPromptStyle,
   setPromptVision,
   setPublicWallet,
+  putWalletRequest,
   // Admin prompt management
   getPromptBaseRaw,
   getPromptVisionRaw,
@@ -75,6 +76,25 @@ export async function handleApi(req: Request, env: Env): Promise<Response> {
     return json({ ok: true, user, quota: q, banner });
   }
 
+  if (path === "/api/profile") {
+    const q = remaining(env, user);
+    const banner = await getBanner(env);
+    return json({
+      ok: true,
+      user,
+      quota: q,
+      banner,
+      commissionPct: user.referralCommissionPct ?? 0,
+      subEnd: user.subscription?.expiresAt ? Date.parse(user.subscription.expiresAt) : null,
+      referralCodes: user.refCodes ?? [],
+    });
+  }
+
+  if (path === "/api/banner") {
+    const banner = await getBanner(env);
+    return json({ ok: true, banner });
+  }
+
   if (path === "/api/settings") {
     const body = await req.json().catch(() => ({}));
     const s = body?.settings;
@@ -87,6 +107,43 @@ export async function handleApi(req: Request, env: Env): Promise<Response> {
       await putUser(env, user);
     }
     return json({ ok: true, user });
+  }
+
+  if (path === "/api/wallet/public") {
+    const wallet = await getPublicWallet(env);
+    return json({ ok: true, wallet });
+  }
+
+  if (path === "/api/wallet/set") {
+    const body = await req.json().catch(() => ({}));
+    const address = String(body.address || "").trim();
+    if (!address) return json({ ok: false, error: "address required" }, 400);
+    user.wallet = { ...user.wallet, bep20Address: address };
+    await putUser(env, user);
+    return json({ ok: true });
+  }
+
+  if (path === "/api/wallet/request") {
+    const body = await req.json().catch(() => ({}));
+    const kind = String(body.kind || "").trim().toLowerCase();
+    const amount = Number(body.amount || 0);
+    if (kind !== "deposit" && kind !== "withdraw") return json({ ok: false, error: "invalid kind" }, 400);
+    if (kind === "withdraw" && !user.wallet?.bep20Address) {
+      return json({ ok: false, error: "bep20 address required" }, 400);
+    }
+    const id = (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${user.id}`);
+    await putWalletRequest(env, user.id, {
+      id,
+      kind: kind as "deposit" | "withdraw",
+      amount: Number.isFinite(amount) && amount > 0 ? amount : undefined,
+      createdAt: new Date().toISOString(),
+    });
+    await notifyAdmins(env, `🏦 درخواست کیف پول
+User: ${user.id}
+Kind: ${kind}
+Amount: ${Number.isFinite(amount) && amount > 0 ? amount : "-"}
+BEP20: ${user.wallet?.bep20Address ?? "-"}`);
+    return json({ ok: true, id });
   }
 
   if (path === "/api/analyze") {

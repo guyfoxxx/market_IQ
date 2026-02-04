@@ -105,7 +105,8 @@ function settingsKb(u: UserProfile) {
     .text("TF: H4", "set:tf:H4").text("TF: D1", "set:tf:D1").row()
     .text("ریسک کم", "set:risk:LOW").text("ریسک متوسط", "set:risk:MEDIUM").text("ریسک زیاد", "set:risk:HIGH").row()
     .text("GENERAL", "set:style:GENERAL").text("PA", "set:style:PA").text("ICT", "set:style:ICT").row()
-    .text("ATR", "set:style:ATR").text("RTM", "set:style:RTM").text("CUSTOM", "set:style:CUSTOM").row()
+    .text("ATR", "set:style:ATR").text("RTM", "set:style:RTM").text("DEEP", "set:style:DEEP").row()
+    .text("CUSTOM", "set:style:CUSTOM").row()
     .text("News ON", "set:news:ON").text("News OFF", "set:news:OFF").row()
     .text("⬅️ منو", "menu:home");
   return kb;
@@ -132,10 +133,10 @@ async function safeReplyPlain(ctx: any, text: string, extra: any = {}) {
 }
 
 async function safeReply(ctx: any, text: string, extra: any = {}) {
-  return safeReply(ctx, text, { parse_mode: "HTML", disable_web_page_preview: true, ...extra });
+  return ctx.reply(text, { parse_mode: "HTML", disable_web_page_preview: true, ...extra });
 }
 async function safeEdit(ctx: any, text: string, extra: any = {}) {
-  return safeEdit(ctx, text, { parse_mode: "HTML", disable_web_page_preview: true, ...extra });
+  return ctx.editMessageText(text, { parse_mode: "HTML", disable_web_page_preview: true, ...extra });
 }
 
 async function showMenu(ctx: any, env: Env) {
@@ -183,7 +184,7 @@ export function createBot(env: Env) {
   bot.catch(async (err) => {
     console.log("BOT ERROR", err.error);
     try {
-      await err.safeReply(ctx, "❌ خطای داخلی رخ داد. لطفاً دوباره تلاش کنید یا /support را بزنید.");
+      await safeReply(err.ctx, "❌ خطای داخلی رخ داد. لطفاً دوباره تلاش کنید یا /support را بزنید.");
     } catch {}
   });
 
@@ -212,7 +213,7 @@ export function createBot(env: Env) {
       await safeReply(ctx, "📞 برای ادامه، لطفاً شماره خود را Share کنید:", { reply_markup: kb });
       return;
     }
-    await showMenu(ctx);
+    await showMenu(ctx, env);
   });
 
   bot.command("signals", async (ctx) => {
@@ -263,29 +264,7 @@ export function createBot(env: Env) {
     await safeReply(ctx, txt, { reply_markup: mainMenuKb() });
   });
 
-  bot.command(["buy", "pay"], async (ctx) => {
-    const price = env.SUB_PRICE_USDT ?? "29";
-    const days = env.SUB_DURATION_DAYS ?? "30";
-    const wallet = await getPublicWallet(env);
-    await safeReply(ctx, 
-      `💳 خرید اشتراک
-
-• قیمت: ${price} USDT
-• مدت: ${days} روز
-
-` +
-      `1) مبلغ را به ولت زیر ارسال کنید:
-${wallet ?? "❌ ولت تنظیم نشده"}
-
-` +
-      `2) سپس TxID را ثبت کنید:
-/tx YOUR_TXID`,
-      { reply_markup: mainMenuKb() }
-    );
-  });
-
   
-
 
 async function showBuy(ctx: any, env: Env) {
   const plans = await getPlans(env);
@@ -311,10 +290,6 @@ async function showBuy(ctx: any, env: Env) {
 
 bot.command("buy", async (ctx) => showBuy(ctx, env));
 bot.command("pay", async (ctx) => showBuy(ctx, env));
-
-bot.command("pay", async (ctx) => {
-  await safeReply(ctx, "برای خرید اشتراک از دستور /buy استفاده کنید.");
-});
 
 bot.command("tx", async (ctx) => {
     const u = requireUser(ctx);
@@ -538,7 +513,7 @@ if (data === "planlist") {
     // Menu
     if (data === "menu:home") {
       await ctx.answerCallbackQuery();
-      await showMenu(ctx);
+      await showMenu(ctx, env);
       return;
     }
     if (data === "menu:signals") {
@@ -935,7 +910,7 @@ ${txt}`);
       }
 
       await safeReply(ctx, "✅ آنبوردینگ تکمیل شد!");
-      await showMenu(ctx);
+      await showMenu(ctx, env);
       return;
     }
 
