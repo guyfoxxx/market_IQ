@@ -536,7 +536,7 @@ ${desc}`;
         if (!env.TELEGRAM_WEBHOOK_SECRET || secret !== String(env.TELEGRAM_WEBHOOK_SECRET)) {
           return new Response("forbidden", { status: 403 });
         }
-        if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
+        if (request.method !== "POST") return new Response("ok", { status: 200 });
 
         const update = await request.json().catch(() => null);
         if (!update) return new Response("bad request", { status: 400 });
@@ -1420,16 +1420,10 @@ async function setVisionPromptTemplate(env, prompt){
 }
 
 /* ========================== TELEGRAM API ========================== */
-function getTelegramToken(env){
-  return (env && (env.TELEGRAM_BOT_TOKEN || env.BOT_TOKEN || env.BOT_TOKEN)) || "";
-}
 async function tgApi(env, method, payload, isMultipart=false){
-  const token = getTelegramToken(env);
-  if(!token){
-    console.error("Missing TELEGRAM_BOT_TOKEN/BOT_TOKEN");
-    return { ok:false, description:"Missing TELEGRAM_BOT_TOKEN/BOT_TOKEN" };
-  }
-  const url = `https://api.telegram.org/bot${token}/${method}`;
+  const _token = (env.TELEGRAM_BOT_TOKEN || env.BOT_TOKEN || env.TELEGRAM_TOKEN || env.BOT_API_TOKEN || "").toString().trim();
+  if(!_token) throw new Error("missing_bot_token_env");
+  const url = `https://api.telegram.org/bot${_token}/${method}`;
   const r = isMultipart
     ? await fetch(url, { method:"POST", body: payload })
     : await fetch(url, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payload) });
