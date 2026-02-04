@@ -235,6 +235,32 @@ export async function setPromptStyle(env: Env, style: string, text: string) {
   await env.USERS_KV.put(PROMPT_STYLE(style), text);
 }
 
+export async function getPromptBaseRaw(env: Env): Promise<{ text: string; source: "override" | "default" }> {
+  const v = await env.USERS_KV.get(PROMPT_BASE);
+  return { text: v ?? DEFAULT_BASE_PROMPT, source: v == null ? "default" : "override" };
+}
+export async function resetPromptBase(env: Env) {
+  await env.USERS_KV.delete(PROMPT_BASE);
+}
+
+export async function getPromptVisionRaw(env: Env): Promise<{ text: string; source: "override" | "default" }> {
+  const v = await env.USERS_KV.get(PROMPT_VISION);
+  return { text: v ?? DEFAULT_VISION_PROMPT, source: v == null ? "default" : "override" };
+}
+export async function resetPromptVision(env: Env) {
+  await env.USERS_KV.delete(PROMPT_VISION);
+}
+
+export async function getPromptStyleRaw(env: Env, style: string): Promise<{ text: string; source: "override" | "default" }> {
+  const key = PROMPT_STYLE(style);
+  const v = await env.USERS_KV.get(key);
+  const def = DEFAULT_STYLE_PROMPTS[style] ?? DEFAULT_STYLE_PROMPTS["GENERAL"];
+  return { text: v ?? def, source: v == null ? "default" : "override" };
+}
+export async function resetPromptStyle(env: Env, style: string) {
+  await env.USERS_KV.delete(PROMPT_STYLE(style));
+}
+
 export const DEFAULT_BASE_PROMPT = `شما یک تحلیل‌گر حرفه‌ای بازار مالی هستید.
 خروجی باید «ساختاریافته» و «قابل اجرا» باشد.
 همیشه به مدیریت ریسک و سناریوهای جایگزین اشاره کن.
