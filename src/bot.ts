@@ -58,6 +58,28 @@ interface FlowState {
   data?: any;
 }
 
+const MARKET_SYMBOLS: Record<Market, string[]> = {
+  CRYPTO: ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT"],
+  FOREX: ["EURUSD=X", "GBPUSD=X", "USDJPY=X", "USDCAD=X", "AUDUSD=X", "USDCHF=X"],
+  METALS: ["XAUUSD=X", "XAGUSD=X", "XPTUSD=X", "XPDUSD=X"],
+  STOCKS: ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA"],
+};
+
+function symbolKb(market: Market) {
+  const kb = new InlineKeyboard();
+  const symbols = MARKET_SYMBOLS[market] || [];
+  for (let i = 0; i < symbols.length; i += 2) {
+    const a = symbols[i];
+    const b = symbols[i + 1];
+    kb.text(a, `sig:symbol:${a}`);
+    if (b) kb.text(b, `sig:symbol:${b}`);
+    kb.row();
+  }
+  kb.text("✍️ نماد دیگر", "sig:symbol:custom").row();
+  kb.text("⬅️ منو", "menu:home");
+  return kb;
+}
+
 async function getState(env: Env, userId: number): Promise<FlowState | null> {
   const raw = await env.USERS_KV.get(STATE_KEY(userId));
   return raw ? JSON.parse(raw) : null;
@@ -70,21 +92,23 @@ async function setState(env: Env, userId: number, state: FlowState | null) {
   await env.USERS_KV.put(STATE_KEY(userId), JSON.stringify(state), { expirationTtl: 60 * 60 * 6 }); // 6h
 }
 
-function mainMenuKb() {
-  return new InlineKeyboard()
-    .text("📈 تحلیل/سیگنال", "menu:signals")
-    .text("⚙️ تنظیمات", "menu:settings")
+function mainMenuReplyKb() {
+  return new Keyboard()
+    .text("📈 تحلیل/سیگنال")
+    .text("⚙️ تنظیمات")
     .row()
-    .text("👤 پروفایل", "menu:profile")
-    .text("💳 خرید اشتراک", "menu:buy")
+    .text("👤 پروفایل")
+    .text("💳 خرید اشتراک")
     .row()
-    .text("🎁 رفرال", "menu:ref")
-    .text("🧠 تعیین سطح", "menu:level")
+    .text("🏦 ولت")
+    .text("🎁 رفرال")
     .row()
-    .text("🆘 پشتیبانی", "menu:support")
-    .text("📚 آموزش", "menu:education")
+    .text("🧠 تعیین سطح")
+    .text("🆘 پشتیبانی")
     .row()
-    .text("📱 Mini App", "menu:app");
+    .text("📚 آموزش")
+    .text("📱 Mini App")
+    .resized();
 }
 
 function toMarketLabel(m: Market) {
@@ -105,7 +129,8 @@ function settingsKb(u: UserProfile) {
     .text("TF: H4", "set:tf:H4").text("TF: D1", "set:tf:D1").row()
     .text("ریسک کم", "set:risk:LOW").text("ریسک متوسط", "set:risk:MEDIUM").text("ریسک زیاد", "set:risk:HIGH").row()
     .text("GENERAL", "set:style:GENERAL").text("PA", "set:style:PA").text("ICT", "set:style:ICT").row()
-    .text("ATR", "set:style:ATR").text("RTM", "set:style:RTM").text("CUSTOM", "set:style:CUSTOM").row()
+    .text("ATR", "set:style:ATR").text("RTM", "set:style:RTM").text("DEEP", "set:style:DEEP").row()
+    .text("CUSTOM", "set:style:CUSTOM").row()
     .text("News ON", "set:news:ON").text("News OFF", "set:news:OFF").row()
     .text("⬅️ منو", "menu:home");
   return kb;
@@ -132,10 +157,10 @@ async function safeReplyPlain(ctx: any, text: string, extra: any = {}) {
 }
 
 async function safeReply(ctx: any, text: string, extra: any = {}) {
-  return safeReply(ctx, text, { parse_mode: "HTML", disable_web_page_preview: true, ...extra });
+  return ctx.reply(text, { parse_mode: "HTML", disable_web_page_preview: true, ...extra });
 }
 async function safeEdit(ctx: any, text: string, extra: any = {}) {
-  return safeEdit(ctx, text, { parse_mode: "HTML", disable_web_page_preview: true, ...extra });
+  return ctx.editMessageText(text, { parse_mode: "HTML", disable_web_page_preview: true, ...extra });
 }
 
 async function showMenu(ctx: any, env: Env) {
@@ -152,21 +177,184 @@ async function showMenu(ctx: any, env: Env) {
   const text =
     `Market IQ ✅\n\n` +
     `👋 خوش آمدی ${displayName}\n\n` +
-    `از منوی زیر انتخاب کن یا یکی از دستورها رو بزن:\n\n` +
-    `• /signals  تحلیل و سیگنال\n` +
-    `• /settings  تنظیمات\n` +
-    `• /profile  پروفایل و سهمیه\n` +
-    `• /buy  خرید اشتراک\n` +
-    `• /wallet  آدرس ولت\n` +
-    `• /ref  رفرال و امتیاز\n` +
-    `• /support  پشتیبانی\n\n` +
-    `شروع تحلیل: /signals`;
+    `از دکمه‌های منو انتخاب کن (بدون نیاز به تایپ دستور):\n` +
+    `• شروع تحلیل\n` +
+    `• تنظیمات و پروفایل\n` +
+    `• خرید اشتراک و ولت\n` +
+    `• رفرال و پشتیبانی`;
 
-  await safeReplyPlain(ctx, text, { reply_markup: mainMenuKb() });
+  await safeReplyPlain(ctx, text, { reply_markup: mainMenuReplyKb() });
 }
 
 export function createBot(env: Env) {
   const bot = new Bot<MyContext>(env.BOT_TOKEN, { botInfo: JSON.parse(env.BOT_INFO || "{}") });
+
+  async function startSignalsFlow(ctx: MyContext) {
+    const u = requireUser(ctx);
+    await setState(env, u.id, { flow: "signals", step: "choose_market" });
+    const kb = new InlineKeyboard()
+      .text("CRYPTO", "sig:market:CRYPTO")
+      .text("FOREX", "sig:market:FOREX")
+      .row()
+      .text("METALS", "sig:market:METALS")
+      .text("STOCKS", "sig:market:STOCKS")
+      .row()
+      .text("⬅️ منو", "menu:home");
+    await safeReply(ctx, "مرحله ۱/۲: بازار را انتخاب کن:", { reply_markup: kb });
+  }
+
+  async function showSettings(ctx: MyContext) {
+    const u = requireUser(ctx);
+    await safeReply(ctx, settingsText(u), { reply_markup: settingsKb(u) });
+  }
+
+  async function showProfile(ctx: MyContext) {
+    const u = requireUser(ctx);
+    await ensureQuotaReset(env, u);
+    const q = remaining(env, u);
+    const subActive = u.subscription.active && u.subscription.expiresAt && Date.parse(u.subscription.expiresAt) > Date.now();
+    const wallet = await getPublicWallet(env);
+
+    const txt = `👤 پروفایل
+• نام: ${u.name || "—"}
+• شماره: ${u.phone || "—"}
+• تجربه: ${u.experience || "—"}
+• بازار علاقه‌مند: ${u.favoriteMarket ? toMarketLabel(u.favoriteMarket) : "—"}
+
+⭐ امتیاز: ${u.points}
+👥 دعوت موفق: ${u.successfulInvites}
+💰 کمیسیون رفرال: ${u.referralCommissionPct}% 
+
+📌 سهمیه:
+• روزانه مصرف‌شده: ${u.quota.dailyUsed} | باقی‌مانده: ${q.dailyLeft === Infinity ? "نامحدود" : q.dailyLeft}
+• ماهانه مصرف‌شده: ${u.quota.monthlyUsed} | باقی‌مانده: ${q.monthLeft === Infinity ? "نامحدود" : q.monthLeft}
+
+💳 اشتراک: ${subActive ? "فعال ✅" : "غیرفعال ❌"}
+• انقضا: ${subActive ? fmtDateIso(u.subscription.expiresAt, env.TZ) : "-"}
+
+🏦 ولت عمومی: ${wallet ?? "تنظیم نشده"}
+`;
+    await safeReply(ctx, txt, { reply_markup: mainMenuReplyKb() });
+  }
+
+  async function showSupport(ctx: MyContext) {
+    await safeReply(ctx,
+      "🆘 پشتیبانی: پیام خود را ارسال کنید تا به ادمین‌ها فوروارد شود.\n📚 آموزش: به‌زودی ...",
+      { reply_markup: mainMenuReplyKb() }
+    );
+  }
+
+  async function redeemPoints(ctx: MyContext) {
+    const u = requireUser(ctx);
+    const need = parseIntSafe(env.REDEEM_POINTS, 500);
+    const days = parseIntSafe(env.REDEEM_DAYS, 30);
+    if (u.points < need) {
+      await safeReply(ctx, `امتیاز کافی نیست.
+نیاز: ${need}
+امتیاز شما: ${u.points}`, { reply_markup: mainMenuReplyKb() });
+      return;
+    }
+    u.points -= need;
+    const now = Date.now();
+    const base = u.subscription.expiresAt && Date.parse(u.subscription.expiresAt) > now ? Date.parse(u.subscription.expiresAt) : now;
+    const expires = new Date(base + days * 24 * 3600 * 1000).toISOString();
+    u.subscription.active = true;
+    u.subscription.expiresAt = expires;
+    await putUser(env, u);
+    await safeReply(ctx, `✅ اشتراک رایگان فعال شد.
+انقضا: ${fmtDateIso(expires, env.TZ)}`, { reply_markup: mainMenuReplyKb() });
+  }
+
+  async function showWallet(ctx: MyContext) {
+    const wallet = await getPublicWallet(env);
+    await safeReply(ctx, wallet ? `🏦 آدرس ولت عمومی:\n${wallet}` : "❌ هنوز ولت عمومی تنظیم نشده است.", {
+      reply_markup: mainMenuReplyKb(),
+    });
+  }
+
+  async function showRef(ctx: MyContext) {
+    const u = requireUser(ctx);
+    const linkBase = `https://t.me/${(bot.botInfo as any)?.username ?? "YOUR_BOT"}?start=`;
+    const codes = u.refCodes.map((c, i) => `${i + 1}) ${linkBase}${c}`).join("\n");
+    const kb = new InlineKeyboard()
+      .text("🎁 تبدیل امتیاز", "ref:redeem")
+      .row()
+      .text("⬅️ منو", "menu:home");
+    await safeReply(ctx, `🎁 رفرال شما:
+${codes}
+
+دعوت موفق: ${u.successfulInvites}
+امتیاز: ${u.points}
+
+برای تبدیل امتیاز، از دکمه زیر استفاده کن.`, { disable_web_page_preview: true, reply_markup: kb });
+  }
+
+  async function startLevelFlow(ctx: MyContext) {
+    const u = requireUser(ctx);
+    await setState(env, u.id, { flow: "level", step: "q1", data: { answers: [] } });
+    await safeReply(ctx, "🧠 آزمون تعیین سطح شروع شد.\nسوال 1/6: هدف اصلی شما از ترید چیست؟ (کوتاه پاسخ بده)");
+  }
+
+  async function runSignalAnalysis(ctx: MyContext, u: UserProfile, market: Market, symbol: string) {
+    try {
+      const candles = await fetchCandles(env, market, symbol, u.settings.timeframe, 200);
+
+      const base = await getPromptBase(env);
+      const stylePrompt = u.settings.style === "CUSTOM" && u.customPrompt?.ready && u.customPrompt.text
+        ? u.customPrompt.text
+        : await getPromptStyle(env, u.settings.style);
+
+      const candleSummary = summarizeCandles(candles);
+
+      const analysisPrompt = `${base}
+
+[Style]
+${stylePrompt}
+
+[User settings]
+timeframe=${u.settings.timeframe}
+risk=${u.settings.risk}
+news=${u.settings.news}
+
+[Market]
+market=${market}
+symbol=${symbol}
+
+[OHLC summary]
+${candleSummary}
+
+خروجی حتماً با این قالب باشد:
+- وضعیت روند و ساختار (BOS/CHOCH اگر لازم)
+- نواحی مهم (Supply/Demand/OB/FVG/Support/Resistance)
+- سناریو Long / Short (در صورت امکان)
+- پیشنهاد ورود/حدضرر/اهداف (TP1/TP2)
+- مدیریت ریسک (RR پیشنهادی)
+- هشدارها/خبر (اگر news=ON)
+در انتها دقیقاً یک JSON معتبر (بدون کدبلاک/بدون کدبلاک ) تولید کن:
+{
+  "zones":[{"type":"demand","from":0,"to":0,"label":"..."}],
+  "levels":{"entry":0,"sl":0,"tp":[0,0]},
+  "bias":"bullish|bearish|range",
+  "notes":"..."
+}
+`;
+
+      const out = await callAI(env, analysisPrompt, { temperature: 0.15 });
+      const j = extractJsonBlock(out);
+      const zones = normalizeZones(j?.zones);
+      const chartUrl = zones.length ? quickChartUrl(symbol, candles, zones) : null;
+
+      await safeReply(ctx, out, { disable_web_page_preview: true });
+      if (chartUrl) {
+        await ctx.replyWithPhoto(chartUrl, { caption: "📌 چارت با زون‌ها" });
+      } else {
+        await safeReply(ctx, "ℹ️ زون قابل استخراج نبود؛ برای چارت، خروجی JSON را دقیق‌تر تنظیم کنید.");
+      }
+    } catch (e: any) {
+      await safeReply(ctx, `❌ خطا: ${e?.message ?? "unknown"}
+(نماد/بازار را چک کن و دوباره تلاش کن)`);
+    }
+  }
 
   bot.use(async (ctx, next) => {
     ctx.env = env;
@@ -183,7 +371,7 @@ export function createBot(env: Env) {
   bot.catch(async (err) => {
     console.log("BOT ERROR", err.error);
     try {
-      await err.safeReply(ctx, "❌ خطای داخلی رخ داد. لطفاً دوباره تلاش کنید یا /support را بزنید.");
+      await safeReply(err.ctx, "❌ خطای داخلی رخ داد. لطفاً دوباره تلاش کنید یا /support را بزنید.");
     } catch {}
   });
 
@@ -212,80 +400,22 @@ export function createBot(env: Env) {
       await safeReply(ctx, "📞 برای ادامه، لطفاً شماره خود را Share کنید:", { reply_markup: kb });
       return;
     }
-    await showMenu(ctx);
+    await showMenu(ctx, env);
   });
 
   bot.command("signals", async (ctx) => {
-    const u = requireUser(ctx);
-    await setState(env, u.id, { flow: "signals", step: "choose_market" });
-    const kb = new InlineKeyboard()
-      .text("CRYPTO", "sig:market:CRYPTO")
-      .text("FOREX", "sig:market:FOREX")
-      .row()
-      .text("METALS", "sig:market:METALS")
-      .text("STOCKS", "sig:market:STOCKS")
-      .row()
-      .text("⬅️ منو", "menu:home");
-    await safeReply(ctx, "بازار را انتخاب کن:", { reply_markup: kb });
+    await startSignalsFlow(ctx);
   });
 
   bot.command("settings", async (ctx) => {
-    const u = requireUser(ctx);
-    await safeReply(ctx, settingsText(u), { reply_markup: settingsKb(u) });
+    await showSettings(ctx);
   });
 
   bot.command("profile", async (ctx) => {
-    const u = requireUser(ctx);
-    await ensureQuotaReset(env, u);
-    const q = remaining(env, u);
-    const subActive = u.subscription.active && u.subscription.expiresAt && Date.parse(u.subscription.expiresAt) > Date.now();
-    const wallet = await getPublicWallet(env);
-
-    const txt = `👤 پروفایل
-• نام: ${u.name || "—"}
-• شماره: ${u.phone || "—"}
-• تجربه: ${u.experience || "—"}
-• بازار علاقه‌مند: ${u.favoriteMarket ? toMarketLabel(u.favoriteMarket) : "—"}
-
-⭐ امتیاز: ${u.points}
-👥 دعوت موفق: ${u.successfulInvites}
-💰 کمیسیون رفرال: ${u.referralCommissionPct}% 
-
-📌 سهمیه:
-• روزانه مصرف‌شده: ${u.quota.dailyUsed} | باقی‌مانده: ${q.dailyLeft === Infinity ? "نامحدود" : q.dailyLeft}
-• ماهانه مصرف‌شده: ${u.quota.monthlyUsed} | باقی‌مانده: ${q.monthLeft === Infinity ? "نامحدود" : q.monthLeft}
-
-💳 اشتراک: ${subActive ? "فعال ✅" : "غیرفعال ❌"}
-• انقضا: ${subActive ? fmtDateIso(u.subscription.expiresAt, env.TZ) : "-"}
-
-🏦 ولت عمومی: ${wallet ?? "تنظیم نشده"}
-`;
-    await safeReply(ctx, txt, { reply_markup: mainMenuKb() });
-  });
-
-  bot.command(["buy", "pay"], async (ctx) => {
-    const price = env.SUB_PRICE_USDT ?? "29";
-    const days = env.SUB_DURATION_DAYS ?? "30";
-    const wallet = await getPublicWallet(env);
-    await safeReply(ctx, 
-      `💳 خرید اشتراک
-
-• قیمت: ${price} USDT
-• مدت: ${days} روز
-
-` +
-      `1) مبلغ را به ولت زیر ارسال کنید:
-${wallet ?? "❌ ولت تنظیم نشده"}
-
-` +
-      `2) سپس TxID را ثبت کنید:
-/tx YOUR_TXID`,
-      { reply_markup: mainMenuKb() }
-    );
+    await showProfile(ctx);
   });
 
   
-
 
 async function showBuy(ctx: any, env: Env) {
   const plans = await getPlans(env);
@@ -311,10 +441,6 @@ async function showBuy(ctx: any, env: Env) {
 
 bot.command("buy", async (ctx) => showBuy(ctx, env));
 bot.command("pay", async (ctx) => showBuy(ctx, env));
-
-bot.command("pay", async (ctx) => {
-  await safeReply(ctx, "برای خرید اشتراک از دستور /buy استفاده کنید.");
-});
 
 bot.command("tx", async (ctx) => {
     const u = requireUser(ctx);
@@ -365,14 +491,11 @@ TxID: ${txid}`);
   });
 
   bot.command("wallet", async (ctx) => {
-    const wallet = await getPublicWallet(env);
-    await safeReply(ctx, wallet ? `🏦 آدرس ولت عمومی:\n${wallet}` : "❌ هنوز ولت عمومی تنظیم نشده است.");
+    await showWallet(ctx);
   });
 
   bot.command("level", async (ctx) => {
-    const u = requireUser(ctx);
-    await setState(env, u.id, { flow: "level", step: "q1", data: { answers: [] } });
-    await safeReply(ctx, "🧠 آزمون تعیین سطح شروع شد.\nسوال 1/6: هدف اصلی شما از ترید چیست؟ (کوتاه پاسخ بده)");
+    await startLevelFlow(ctx);
   });
 
   bot.command("customprompt", async (ctx) => {
@@ -382,45 +505,15 @@ TxID: ${txid}`);
   });
 
   bot.command("ref", async (ctx) => {
-    const u = requireUser(ctx);
-    const linkBase = `https://t.me/${(bot.botInfo as any)?.username ?? "YOUR_BOT"}?start=`;
-    const codes = u.refCodes.map((c, i) => `${i + 1}) ${linkBase}${c}`).join("\n");
-    await safeReply(ctx, `🎁 رفرال شما:
-${codes}
-
-دعوت موفق: ${u.successfulInvites}
-امتیاز: ${u.points}
-
-برای تبدیل امتیاز: /redeem`, { disable_web_page_preview: true });
+    await showRef(ctx);
   });
 
   bot.command("redeem", async (ctx) => {
-    const u = requireUser(ctx);
-    const need = parseIntSafe(env.REDEEM_POINTS, 500);
-    const days = parseIntSafe(env.REDEEM_DAYS, 30);
-    if (u.points < need) {
-      await safeReply(ctx, `امتیاز کافی نیست.
-نیاز: ${need}
-امتیاز شما: ${u.points}`);
-      return;
-    }
-    u.points -= need;
-    // activate subscription for days from now or extend
-    const now = Date.now();
-    const base = u.subscription.expiresAt && Date.parse(u.subscription.expiresAt) > now ? Date.parse(u.subscription.expiresAt) : now;
-    const expires = new Date(base + days * 24 * 3600 * 1000).toISOString();
-    u.subscription.active = true;
-    u.subscription.expiresAt = expires;
-    await putUser(env, u);
-    await safeReply(ctx, `✅ اشتراک رایگان فعال شد.
-انقضا: ${fmtDateIso(expires, env.TZ)}`);
+    await redeemPoints(ctx);
   });
 
   bot.command(["support", "education"], async (ctx) => {
-    await safeReply(ctx, 
-      "🆘 پشتیبانی: پیام خود را ارسال کنید تا به ادمین‌ها فوروارد شود.\n📚 آموزش: به‌زودی ...",
-      { reply_markup: mainMenuKb() }
-    );
+    await showSupport(ctx);
   });
 
   bot.command("payments", async (ctx) => {
@@ -538,47 +631,52 @@ if (data === "planlist") {
     // Menu
     if (data === "menu:home") {
       await ctx.answerCallbackQuery();
-      await showMenu(ctx);
+      await showMenu(ctx, env);
       return;
     }
     if (data === "menu:signals") {
       await ctx.answerCallbackQuery();
-      await ctx.api.sendMessage(u.id, "/signals");
+      await startSignalsFlow(ctx);
       return;
     }
     if (data === "menu:settings") {
       await ctx.answerCallbackQuery();
-      await safeReply(ctx, settingsText(u), { reply_markup: settingsKb(u) });
+      await showSettings(ctx);
       return;
     }
     if (data === "menu:profile") {
       await ctx.answerCallbackQuery();
-      await ctx.api.sendMessage(u.id, "/profile");
+      await showProfile(ctx);
       return;
     }
     if (data === "menu:buy") {
       await ctx.answerCallbackQuery();
-      await ctx.api.sendMessage(u.id, "/buy");
+      await showBuy(ctx, env);
+      return;
+    }
+    if (data === "menu:wallet") {
+      await ctx.answerCallbackQuery();
+      await showWallet(ctx);
       return;
     }
     if (data === "menu:ref") {
       await ctx.answerCallbackQuery();
-      await ctx.api.sendMessage(u.id, "/ref");
+      await showRef(ctx);
       return;
     }
     if (data === "menu:level") {
       await ctx.answerCallbackQuery();
-      await ctx.api.sendMessage(u.id, "/level");
+      await startLevelFlow(ctx);
       return;
     }
     if (data === "menu:support") {
       await ctx.answerCallbackQuery();
-      await ctx.api.sendMessage(u.id, "/support");
+      await showSupport(ctx);
       return;
     }
     if (data === "menu:education") {
       await ctx.answerCallbackQuery();
-      await ctx.api.sendMessage(u.id, "/education");
+      await showSupport(ctx);
       return;
     }
     if (data === "menu:app") {
@@ -613,9 +711,30 @@ if (data === "planlist") {
     if (data.startsWith("sig:market:")) {
       await ctx.answerCallbackQuery();
       const market = data.split(":")[2] as Market;
-      await setState(env, u.id, { flow: "signals", step: "ask_symbol", data: { market } });
-      await safeReply(ctx, `نماد را ارسال کن (مثلاً BTCUSDT یا BTC-USD یا EURUSD=X)
+      await setState(env, u.id, { flow: "signals", step: "choose_symbol", data: { market } });
+      await safeReply(ctx, `مرحله ۲/۲: نماد را انتخاب کن
+بازار: ${toMarketLabel(market)}`, { reply_markup: symbolKb(market) });
+      return;
+    }
+
+    if (data.startsWith("sig:symbol:")) {
+      await ctx.answerCallbackQuery();
+      const choice = data.split(":")[2];
+      const st = await getState(env, u.id);
+      const market = st?.data?.market as Market | undefined;
+      if (!market) {
+        await safeReply(ctx, "ابتدا بازار را انتخاب کن.", { reply_markup: mainMenuReplyKb() });
+        return;
+      }
+      if (choice === "custom") {
+        await setState(env, u.id, { flow: "signals", step: "ask_symbol", data: { market } });
+        await safeReply(ctx, `مرحله ۲/۲: نماد را ارسال کن (مثلاً BTCUSDT یا BTC-USD یا EURUSD=X)
 بازار: ${toMarketLabel(market)}`);
+        return;
+      }
+      await setState(env, u.id, null);
+      await safeReply(ctx, "⏳ در حال گرفتن دیتا و ساخت تحلیل...");
+      await runSignalAnalysis(ctx, u, market, choice);
       return;
     }
 
@@ -625,6 +744,12 @@ if (data === "planlist") {
       if (!isAdmin(u, env)) return safeReply(ctx, "دسترسی ندارید.");
       const [, action, txid] = data.split(":");
       await approvePayment(bot, env, u.id, txid, action === "approve", ctx);
+      return;
+    }
+
+    if (data === "ref:redeem") {
+      await ctx.answerCallbackQuery();
+      await redeemPoints(ctx);
       return;
     }
   });
@@ -655,6 +780,31 @@ if (data === "planlist") {
     }
 
     const st = await getState(env, u.id);
+
+    if (!st && ctx.message?.text && !ctx.message.text.startsWith("/")) {
+      const t = ctx.message.text.trim();
+      const map: Record<string, () => Promise<void>> = {
+        "📈 تحلیل/سیگنال": () => startSignalsFlow(ctx),
+        "⚙️ تنظیمات": () => showSettings(ctx),
+        "👤 پروفایل": () => showProfile(ctx),
+        "💳 خرید اشتراک": () => showBuy(ctx, env),
+        "🏦 ولت": () => showWallet(ctx),
+        "🎁 رفرال": () => showRef(ctx),
+        "🧠 تعیین سطح": () => startLevelFlow(ctx),
+        "🆘 پشتیبانی": () => showSupport(ctx),
+        "📚 آموزش": () => showSupport(ctx),
+        "📱 Mini App": async () => {
+          await safeReply(ctx, "📱 برای باز کردن Mini App روی دکمه زیر بزن:", {
+            reply_markup: new InlineKeyboard().webApp("Open Mini App", env.PUBLIC_APP_PATH || "/app"),
+          });
+        },
+      };
+      const action = map[t];
+      if (action) {
+        await action();
+        return;
+      }
+    }
 
     // Onboarding steps expecting text
     if (st?.flow === "onboarding" && st.step === "ask_name") {
@@ -755,65 +905,7 @@ ${strategy}
       const market = st.data?.market as Market;
       await setState(env, u.id, null);
       await safeReply(ctx, "⏳ در حال گرفتن دیتا و ساخت تحلیل...");
-
-      try {
-        const candles = await fetchCandles(env, market, symbol, u.settings.timeframe, 200);
-
-        const base = await getPromptBase(env);
-        const stylePrompt = u.settings.style === "CUSTOM" && u.customPrompt?.ready && u.customPrompt.text
-          ? u.customPrompt.text
-          : await getPromptStyle(env, u.settings.style);
-
-        const candleSummary = summarizeCandles(candles);
-
-        const analysisPrompt = `${base}
-
-[Style]
-${stylePrompt}
-
-[User settings]
-timeframe=${u.settings.timeframe}
-risk=${u.settings.risk}
-news=${u.settings.news}
-
-[Market]
-market=${market}
-symbol=${symbol}
-
-[OHLC summary]
-${candleSummary}
-
-خروجی حتماً با این قالب باشد:
-- وضعیت روند و ساختار (BOS/CHOCH اگر لازم)
-- نواحی مهم (Supply/Demand/OB/FVG/Support/Resistance)
-- سناریو Long / Short (در صورت امکان)
-- پیشنهاد ورود/حدضرر/اهداف (TP1/TP2)
-- مدیریت ریسک (RR پیشنهادی)
-- هشدارها/خبر (اگر news=ON)
-در انتها دقیقاً یک JSON معتبر (بدون کدبلاک/بدون کدبلاک ) تولید کن:
-{
-  "zones":[{"type":"demand","from":0,"to":0,"label":"..."}],
-  "levels":{"entry":0,"sl":0,"tp":[0,0]},
-  "bias":"bullish|bearish|range",
-  "notes":"..."
-}
-`;
-
-        const out = await callAI(env, analysisPrompt, { temperature: 0.15 });
-        const j = extractJsonBlock(out);
-        const zones = normalizeZones(j?.zones);
-        const chartUrl = zones.length ? quickChartUrl(symbol, candles, zones) : null;
-
-        await safeReply(ctx, out, { disable_web_page_preview: true });
-        if (chartUrl) {
-          await ctx.replyWithPhoto(chartUrl, { caption: "📌 چارت با زون‌ها" });
-        } else {
-          await safeReply(ctx, "ℹ️ زون قابل استخراج نبود؛ برای چارت، خروجی JSON را دقیق‌تر تنظیم کنید.");
-        }
-      } catch (e: any) {
-        await safeReply(ctx, `❌ خطا: ${e?.message ?? "unknown"}
-(نماد/بازار را چک کن و دوباره تلاش کن)`);
-      }
+      await runSignalAnalysis(ctx, u, market, symbol);
       return;
     }
 
@@ -935,7 +1027,7 @@ ${txt}`);
       }
 
       await safeReply(ctx, "✅ آنبوردینگ تکمیل شد!");
-      await showMenu(ctx);
+      await showMenu(ctx, env);
       return;
     }
 
