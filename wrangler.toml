@@ -1,18 +1,85 @@
-name = "marketiq-bot"
+name = "valinaf25-telegram-signal-bot"
 main = "src/index.ts"
 compatibility_date = "2026-02-04"
+compatibility_flags = ["nodejs_compat"]
 
-# 1) یک KV Namespace بسازید:
-# wrangler kv:namespace create DB
-# سپس id را اینجا قرار دهید.
-kv_namespaces = [
-  { binding = "DB", id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID" }
-]
-
+# Cron trigger: هر 5 دقیقه برای ارسال custom prompt های آماده
 [triggers]
-# برای پردازش Custom Prompt با تاخیر ۲ ساعت (هر ۵ دقیقه بررسی می‌کند)
 crons = ["*/5 * * * *"]
 
-# اگر از محیط‌های مختلف استفاده می‌کنید:
-# [env.production]
-# name = "valinaf-trader-bot"
+[[kv_namespaces]]
+binding = "USERS_KV"
+
+id = "8b953a37d3ef4e92a44d99d7ea3fe911"
+
+
+[vars]
+# از getMe بگیرید و اینجا بگذارید (برای جلوگیری از درخواست اضافه در هر اجرا)
+BOT_INFO = "{}"
+
+# تنظیمات پیش‌فرض (همه قابل override با KV هم هستند)
+FREE_DAILY_LIMIT = "50"
+FREE_MONTHLY_LIMIT = "500"
+SUB_DAILY_LIMIT = "50"
+
+POINTS_PER_REF = "6"
+POINTS_PER_SUB_PURCHASE = "1000"
+REDEEM_POINTS = "500"
+REDEEM_DAYS = "30"
+
+REF_COMMISSION_STEP_PCT = "4"
+REF_COMMISSION_MAX_PCT = "20"
+
+SUB_PRICE_USDT = "29"
+SUB_DURATION_DAYS = "30"
+
+DEFAULT_TIMEFRAME = "H1"
+DEFAULT_RISK = "MEDIUM"
+DEFAULT_STYLE = "GENERAL"
+DEFAULT_NEWS = "OFF"
+
+# لینک مینی‌اپ (بعد از Deploy آدرس Worker را اینجا بگذارید یا KV override کنید)
+PUBLIC_APP_PATH = "/app"
+
+# پنل ادمین (توکن ساده)
+
+ADMIN_PANEL_TOKEN = "4840"
+
+
+# اگر خالی بماند، /wallet یک پیام می‌دهد که تنظیم نشده است
+PUBLIC_WALLET_ADDRESS = ""
+
+# Provider پیش‌فرض AI: openai | gemini
+AI_PROVIDER = "openai"
+
+# مدل‌ها
+OPENAI_MODEL = "gpt-4.1-mini"
+GEMINI_MODEL = "gemini-1.5-pro"
+
+# تایم‌زون برای نمایش‌ها
+TZ = "Europe/Berlin"
+
+
+# --- Queue-first scaling (100k users friendly) ---
+# Create a Queue named "valinaf25-jobs" in Cloudflare dashboard.
+[[queues.producers]]
+binding = "JOBS"
+queue = "valinaf25-jobs"
+
+[[queues.consumers]]
+queue = "valinaf25-jobs"
+max_batch_size = 5
+max_batch_timeout = 30
+
+# Optional R2 bucket for assets (create bucket "valinaf25-assets")
+[[r2_buckets]]
+binding = "ASSETS"
+bucket_name = "valinaf25-assets"
+
+
+# Optional dedicated KV for caching market data (recommended for scale)
+# Create a KV namespace and bind it as CACHE_KV, or omit and the bot will fallback to USERS_KV.
+[[kv_namespaces]]
+binding = "CACHE_KV"
+id = "9cb3d76f32e54d03a69fcdd7a0ff6e13"
+
