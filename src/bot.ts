@@ -139,13 +139,20 @@ async function safeEdit(ctx: any, text: string, extra: any = {}) {
 }
 
 async function showMenu(ctx: any, env: Env) {
-  const u = await getOrCreateUser(env, ctx.from!);
+  const u = await ensureUser(env, {
+    id: ctx.from!.id,
+    username: ctx.from!.username,
+    firstName: ctx.from!.first_name,
+  });
+
   await ensureQuotaReset(env, u);
+
+  const displayName = u.name || u.firstName || "";
 
   const text =
     `Market IQ ✅\n\n` +
-    `👋 خوش آمدی ${u.profile?.name ? u.profile.name : ""}\n\n` +
-    `📌 دستورات اصلی:\n` +
+    `👋 خوش آمدی ${displayName}\n\n` +
+    `از منوی زیر انتخاب کن یا یکی از دستورها رو بزن:\n\n` +
     `• /signals  تحلیل و سیگنال\n` +
     `• /settings  تنظیمات\n` +
     `• /profile  پروفایل و سهمیه\n` +
@@ -153,15 +160,9 @@ async function showMenu(ctx: any, env: Env) {
     `• /wallet  آدرس ولت\n` +
     `• /ref  رفرال و امتیاز\n` +
     `• /support  پشتیبانی\n\n` +
-    `💡 برای شروع تحلیل: /signals`;
+    `شروع تحلیل: /signals`;
 
-  // keep inline keyboard if existed via buildMainMenuKeyboard()
-  try {
-    const kb = buildMainMenuKeyboard();
-    await safeReplyPlain(ctx, text, { reply_markup: kb });
-  } catch {
-    await safeReplyPlain(ctx, text);
-  }
+  await safeReplyPlain(ctx, text, { reply_markup: mainMenuKb() });
 }
 
 export function createBot(env: Env) {
