@@ -10,6 +10,7 @@ const CUSTOMPROMPT_KEY = (userId: number) => `customprompt:${userId}`;
 
 const CONFIG_WALLET = "config:wallet";
 const CONFIG_BANNER = "config:banner";
+const CONFIG_PLANS = "config:plans";
 const PROMPT_BASE = "prompt:base";
 const PROMPT_VISION = "prompt:vision";
 const PROMPT_STYLE = (style: string) => `prompt:style:${style}`;
@@ -216,6 +217,41 @@ export async function setBanner(env: Env, banner: { enabled: boolean; text: stri
   await env.USERS_KV.put(CONFIG_BANNER, JSON.stringify(banner));
 }
 
+
+export interface SubscriptionPlan {
+  id: string;        // e.g. "m1"
+  title: string;     // display
+  priceUsdt: number; // expected payment
+  durationDays: number;
+}
+
+export async function getPlans(env: Env): Promise<SubscriptionPlan[]> {
+  const raw = (await env.USERS_KV.get(CONFIG_PLANS, "json").catch(() => null)) as any;
+  if (Array.isArray(raw) && raw.length) {
+    return raw
+      .map((p: any) => ({
+        id: String(p.id || "").trim(),
+        title: String(p.title || "").trim() || String(p.id || "").trim(),
+        priceUsdt: Number(p.priceUsdt ?? p.price_usdt ?? p.price ?? 0),
+        durationDays: Number(p.durationDays ?? p.duration_days ?? p.days ?? 0),
+      }))
+      .filter((p: any) => p.id && p.priceUsdt > 0 && p.durationDays > 0);
+  }
+
+  const price = Number((env as any).SUB_PRICE_USDT || 29);
+  const days = Number((env as any).SUB_DURATION_DAYS || 30);
+  return [{ id: "m1", title: `Monthly (${days}d)`, priceUsdt: price, durationDays: days }];
+}
+
+export async function setPlans(env: Env, plans: SubscriptionPlan[]) {
+  await env.USERS_KV.put(CONFIG_PLANS, JSON.stringify(plans));
+}
+
+export async function findPlan(env: Env, id: string): Promise<SubscriptionPlan | null> {
+  const plans = await getPlans(env);
+  return plans.find((p) => p.id === id) || null;
+}
+
 export async function getPromptBase(env: Env): Promise<string> {
   return (await env.USERS_KV.get(PROMPT_BASE)) ?? DEFAULT_BASE_PROMPT;
 }
@@ -405,3 +441,11 @@ Keep the explanation practical and execution-focused.`,
   "RTM": "سبک RTM: تمرکز روی بیس/انگالف/ترپ، نواحی عرضه/تقاضا، ورود از ریفاین.",
   "GENERAL": "تحلیل عمومی: روند، سطوح مهم، سناریوها، ریسک/ریوارد."
 };
+
+
+export async function setSelectedPlan(env: Env, userId: number, planId: string) {
+  const u = await getUser(env, userId);
+  if (!u) return;
+  u.settings.selectedPlanId = planId;
+  await putUser(env, u);
+}

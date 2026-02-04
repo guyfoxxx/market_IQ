@@ -1,132 +1,85 @@
 import type { Env } from "../env";
-import { parseFloatSafe, parseIntSafe } from "./utils";
 import { getPublicWallet } from "./storage";
 
-/**
- * Verify a BEP20 (ERC20) transfer tx on BSC using BscScan "proxy" APIs.
- * We decode ERC20 transfer input: a9059cbb + to + value
- */
-export interface VerifyResult {
-  ok: boolean;
-  network: string;
-  reason?: string;
-  toWallet?: string;
-  tokenContract?: string;
-  amount?: number;
-  amountRaw?: string;
-  confirmations?: number;
-  txTo?: string;
-  status?: "SUCCESS" | "FAILED" | "UNKNOWN";
-  hash?: string;
-  blockNumber?: number;
-}
+const TRANSFER_TOPIC0 =
+  "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+const DEFAULT_USDT_BSC = "0x55d398326f99059fF775485246999027B3197955";
 
-const ERC20_TRANSFER_METHOD = "0xa9059cbb";
-
-function strip0x(s: string) {
-  return s.startsWith("0x") ? s.slice(2) : s;
-}
-
-function hexToInt(hex: string): number {
-  return Number.parseInt(strip0x(hex), 16);
+function topicToAddress(topic: string): string {
+  return "0x" + topic.slice(-40);
 }
 
 function hexToBigInt(hex: string): bigint {
-  return BigInt(hex);
+  try {
+    return BigInt(hex);
+  } catch {
+    return 0n;
+  }
 }
 
-function padTo40(hexNo0x: string) {
-  return hexNo0x.padStart(40, "0");
-}
-
-function normalizeAddress(addr: string) {
-  const a = addr.toLowerCase();
-  return a.startsWith("0x") ? a : "0x" + a;
-}
-
-function decodeErc20TransferInput(input: string): { to: string; value: bigint } | null {
-  if (!input || input.length < 10) return null;
-  const low = input.toLowerCase();
-  if (!low.startsWith(ERC20_TRANSFER_METHOD)) return null;
-  const data = strip0x(low).slice(8); // drop method id (4 bytes => 8 hex chars)
-  if (data.length < 64 * 2) return null;
-  const toPart = data.slice(0, 64);
-  const valuePart = data.slice(64, 128);
-  const to = "0x" + toPart.slice(24); // last 40 hex chars
-  const value = BigInt("0x" + valuePart);
-  return { to: normalizeAddress(to), value };
-}
-
-async function bscProxy(env: Env, action: string, params: Record<string, string>) {
-  const apiKey = env.BSCSCAN_API_KEY;
-  const qs = new URLSearchParams({ module: "proxy", action, ...params });
-  if (apiKey) qs.set("apikey", apiKey);
-  const url = `https://api.bscscan.com/api?${qs.toString()}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`BscScan HTTP ${res.status}`);
-  const data = await res.json() as any;
-  // proxy API returns {jsonrpc, id, result} or error
-  if (data?.result == null) throw new Error(`BscScan invalid response: ${JSON.stringify(data).slice(0, 160)}`);
-  return data.result;
-}
-
-export async function verifyPaymentTx(env: Env, txid: string, expectedMinUsdt?: number): Promise<VerifyResult> {
-  const network = (env.PAYMENT_NETWORK || "BSC").toUpperCase();
-  if (network === "OFF") return { ok: false, network, reason: "verification disabled" };
-  if (network !== "BSC") return { ok: false, network, reason: "only BSC supported in this build" };
-
-  const tokenContract = normalizeAddress(env.PAYMENT_TOKEN_CONTRACT || "");
-  if (!tokenContract || tokenContract === "0x") return { ok: false, network, reason: "PAYMENT_TOKEN_CONTRACT missing" };
+export async function verifyBep20UsdtPayment(
+  env: Env,
+  txid: string,
+  expectedUsdt: number
+): Promise<{ ok: boolean; reason?: string; amountUsdt?: number }> {
+  if (!env.BSCSCAN_API_KEY) return { ok: false, reason: "BSCSCAN_API_KEY not set" };
 
   const wallet = await getPublicWallet(env);
-  if (!wallet) return { ok: false, network, reason: "public wallet not set" };
-  const walletNorm = normalizeAddress(wallet);
+  if (!wallet) return { ok: false, reason: "public wallet not set" };
 
-  const tx = await bscProxy(env, "eth_getTransactionByHash", { txhash: txid });
-  const txTo = tx?.to ? normalizeAddress(tx.to) : "";
-  const input = String(tx?.input || "");
+  const contract = (env.USDT_BSC_CONTRACT || DEFAULT_USDT_BSC).toLowerCase();
+  const decimals = parseInt(env.USDT_DECIMALS || "18", 10);
+  const minConf = parseInt(env.AUTO_VERIFY_MIN_CONF || "1", 10);
 
-  // verify it is a token transfer to token contract
-  if (!txTo || txTo === "0x0000000000000000000000000000000000000000") return { ok: false, network, reason: "tx.to missing", tokenContract, toWallet: walletNorm, txTo };
-  if (txTo !== tokenContract) {
-    // sometimes people send BNB directly, not token
-    return { ok: false, network, reason: "tx is not sent to token contract", tokenContract, toWallet: walletNorm, txTo };
-  }
+  const receiptUrl = new URL("https://api.bscscan.com/api");
+  receiptUrl.searchParams.set("module", "proxy");
+  receiptUrl.searchParams.set("action", "eth_getTransactionReceipt");
+  receiptUrl.searchParams.set("txhash", txid);
+  receiptUrl.searchParams.set("apikey", env.BSCSCAN_API_KEY);
 
-  const decoded = decodeErc20TransferInput(input);
-  if (!decoded) return { ok: false, network, reason: "cannot decode ERC20 transfer input", tokenContract, toWallet: walletNorm, txTo };
+  const receiptRes = await fetch(receiptUrl.toString());
+  const receiptJs: any = await receiptRes.json().catch(() => null);
+  const r = receiptJs?.result;
+  if (!r) return { ok: false, reason: "receipt not found yet" };
 
-  if (decoded.to !== walletNorm) {
-    return { ok: false, network, reason: "recipient wallet mismatch", tokenContract, toWallet: walletNorm, txTo, amountRaw: decoded.value.toString() };
-  }
-
-  // USDT decimals = 18 on BSC for this contract
-  const amount = Number(decoded.value) / 1e18;
-
-  // receipt status
-  let status: VerifyResult["status"] = "UNKNOWN";
-  try {
-    const receipt = await bscProxy(env, "eth_getTransactionReceipt", { txhash: txid });
-    if (receipt?.status) status = receipt.status === "0x1" ? "SUCCESS" : "FAILED";
-  } catch {}
+  if (r.status && String(r.status).toLowerCase() !== "0x1") return { ok: false, reason: "tx failed" };
 
   // confirmations
-  let confirmations: number | undefined;
-  let blockNumber: number | undefined;
-  try {
-    const bnHex = tx?.blockNumber;
-    if (bnHex) blockNumber = hexToInt(bnHex);
-    const latestHex = await bscProxy(env, "eth_blockNumber", {});
-    const latest = hexToInt(latestHex);
-    if (blockNumber != null) confirmations = Math.max(0, latest - blockNumber);
-  } catch {}
+  if (r.blockNumber) {
+    const latestUrl = new URL("https://api.bscscan.com/api");
+    latestUrl.searchParams.set("module", "proxy");
+    latestUrl.searchParams.set("action", "eth_blockNumber");
+    latestUrl.searchParams.set("apikey", env.BSCSCAN_API_KEY);
+    const latestRes = await fetch(latestUrl.toString());
+    const latestJs: any = await latestRes.json().catch(() => null);
+    if (latestJs?.result) {
+      const conf = Number(hexToBigInt(latestJs.result) - hexToBigInt(r.blockNumber));
+      if (conf < minConf) return { ok: false, reason: `not enough confirmations (${conf}/${minConf})` };
+    }
+  }
 
-  const min = expectedMinUsdt ?? parseFloatSafe(env.SUB_PRICE_USDT, 29);
-  const minConf = parseIntSafe(env.MIN_CONFIRMATIONS, 3);
+  const logs = Array.isArray(r.logs) ? r.logs : [];
+  const wantTo = wallet.toLowerCase();
+  const expected = BigInt(Math.floor(expectedUsdt * Math.pow(10, decimals)));
+  let best = 0n;
 
-  if (status === "FAILED") return { ok: false, network, reason: "tx failed", tokenContract, toWallet: walletNorm, txTo, amount, amountRaw: decoded.value.toString(), confirmations, status, hash: txid, blockNumber };
-  if (confirmations != null && confirmations < minConf) return { ok: false, network, reason: `not enough confirmations (${confirmations}/${minConf})`, tokenContract, toWallet: walletNorm, txTo, amount, amountRaw: decoded.value.toString(), confirmations, status, hash: txid, blockNumber };
-  if (amount + 1e-9 < min) return { ok: false, network, reason: `amount too low (${amount} < ${min})`, tokenContract, toWallet: walletNorm, txTo, amount, amountRaw: decoded.value.toString(), confirmations, status, hash: txid, blockNumber };
+  for (const log of logs) {
+    const addr = String(log.address || "").toLowerCase();
+    if (addr != contract) continue;
 
-  return { ok: true, network, tokenContract, toWallet: walletNorm, txTo, amount, amountRaw: decoded.value.toString(), confirmations, status, hash: txid, blockNumber };
+    const topics = log.topics;
+    if (!Array.isArray(topics) || topics.length < 3) continue;
+    if (String(topics[0]).toLowerCase() !== TRANSFER_TOPIC0) continue;
+
+    const to = topicToAddress(String(topics[2])).toLowerCase();
+    if (to !== wantTo) continue;
+
+    const value = hexToBigInt(String(log.data || "0x0"));
+    if (value > best) best = value;
+  }
+
+  if (best === 0n) return { ok: false, reason: "no usdt transfer to wallet found" };
+  if (best < expected) return { ok: false, reason: "amount too low" };
+
+  return { ok: true, amountUsdt: Number(best) / Math.pow(10, decimals) };
 }
