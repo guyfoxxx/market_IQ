@@ -1,15 +1,24 @@
 {
-  "name": "marketiq-worker",
+  "name": "valinaf25-telegram-signal-bot-worker",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev --remote",
+    "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "tail": "wrangler tail",
-    "kv:create": "wrangler kv namespace create BOT_KV",
-    "kv:list": "wrangler kv namespace list"
+    "lint": "eslint .",
+    "format": "prettier -w .",
+    "set-webhook": "node scripts/setWebhook.js"
+  },
+  "dependencies": {
+    "grammy": "^1.36.1"
   },
   "devDependencies": {
-    "wrangler": "^3.100.0"
+    "@cloudflare/workers-types": "^4.20260204.0",
+    "@types/node": "^20.11.30",
+    "eslint": "^9.7.0",
+    "prettier": "^3.3.3",
+    "typescript": "^5.5.4",
+    "wrangler": "^3.78.0"
   }
 }

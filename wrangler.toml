@@ -1,69 +1,62 @@
-name = "marketiq-worker"
-main = "marketiq_worker.js"
-compatibility_date = "2026-02-03"
-workers_dev = true
+name = "valinaf25-telegram-signal-bot"
+main = "src/index.ts"
+compatibility_date = "2026-02-04"
+node_compat = true
 
-# Cron برای ارسال خودکار پرامپت اختصاصی (هر 5 دقیقه)
+# Cron trigger: هر 5 دقیقه برای ارسال custom prompt های آماده
 [triggers]
 crons = ["*/5 * * * *"]
 
 [[kv_namespaces]]
-binding = "BOT_KV"
-id = "1d5bfc131118417ab453e9da3501fa5b"
+binding = "USERS_KV"
+id = "PUT_YOUR_KV_NAMESPACE_ID_HERE"
 
 [vars]
-# مهم: TELEGRAM_BOT_TOKEN را به صورت Secret ست کنید (wrangler secret put TELEGRAM_BOT_TOKEN)
+# از getMe بگیرید و اینجا بگذارید (برای جلوگیری از درخواست اضافه در هر اجرا)
+BOT_INFO = "{}"
 
-# یوزرنیم بات بدون @ (برای ساخت لینک رفرال)
-BOT_USERNAME = "marketiq_bot"
-
-# مسیر وبهوک: https://<domain>/telegram/<secret>
-TELEGRAM_WEBHOOK_SECRET = "vfrq"
-
-# منطقه زمانی برای ریست سهمیه و نمایش تاریخ
-TIMEZONE = "Europe/Istanbul"
-
-# Owner/Admin (ID عددی تلگرام)
-OWNER_ID = "7411159758"
-# می‌توانید چند Owner/Admin تعریف کنید
-OWNER_IDS = ""
-OWNER_HANDLES = ""
-ADMIN_IDS = ""
-ADMIN_HANDLES = ""
-
-# کانال/چت‌های ادمین برای دریافت درخواست‌ها (comma-separated chat IDs)
-ADMIN_CHAT_IDS = ""
-
-# --- AI Providers ---
-# حداقل یکی از این کلیدها را ست کنید:
-# OPENAI_API_KEY = "..."
-# GEMINI_API_KEY = "..."
-# (اختیاری) مدل‌ها
-# OPENAI_TEXT_MODEL = "gpt-4o-mini"
-# GEMINI_TEXT_MODEL = "gemini-1.5-flash"
-# OPENAI_VISION_MODEL = "gpt-4o-mini"
-# GEMINI_VISION_MODEL = "gemini-1.5-flash"
-
-# --- Market Data Providers (Optional but recommended for chart accuracy) ---
-# TWELVEDATA_API_KEY = "..."
-# ALPHAVANTAGE_API_KEY = "..."
-# FINNHUB_API_KEY = "..."
-# BINANCE_API_KEY = "..."   # optional
-
-# --- News (Optional) ---
-# NEWSDATA_API_KEY = "..."
-
-# --- Chart rendering (Optional) ---
-# QUICKCHART_API_KEY = "..."
-
-# --- Limits (Optional) ---
+# تنظیمات پیش‌فرض (همه قابل override با KV هم هستند)
 FREE_DAILY_LIMIT = "50"
-SUB_DAILY_LIMIT = "300"
-MONTHLY_LIMIT = "500"
+FREE_MONTHLY_LIMIT = "500"
+SUB_DAILY_LIMIT = "50"
 
-# --- Referral / rewards (Optional) ---
+POINTS_PER_REF = "6"
+POINTS_PER_SUB_PURCHASE = "1000"
+REDEEM_POINTS = "500"
+REDEEM_DAYS = "30"
+
 REF_COMMISSION_STEP_PCT = "4"
 REF_COMMISSION_MAX_PCT = "20"
-REF_POINTS_PER_SUCCESS = "6"
-REF_POINTS_FOR_FREE_SUB = "500"
-FREE_SUB_DAYS_PER_REDEEM = "30"
+
+SUB_PRICE_USDT = "29"
+SUB_DURATION_DAYS = "30"
+
+DEFAULT_TIMEFRAME = "H1"
+DEFAULT_RISK = "MEDIUM"
+DEFAULT_STYLE = "GENERAL"
+DEFAULT_NEWS = "OFF"
+
+# لینک مینی‌اپ (بعد از Deploy آدرس Worker را اینجا بگذارید یا KV override کنید)
+PUBLIC_APP_PATH = "/app"
+
+# پنل ادمین (توکن ساده)
+ADMIN_PANEL_TOKEN = "CHANGE_ME"
+
+# اگر خالی بماند، /wallet یک پیام می‌دهد که تنظیم نشده است
+PUBLIC_WALLET_ADDRESS = ""
+
+# Provider پیش‌فرض AI: openai | gemini
+AI_PROVIDER = "openai"
+
+# مدل‌ها
+OPENAI_MODEL = "gpt-4.1-mini"
+GEMINI_MODEL = "gemini-1.5-pro"
+
+# تایم‌زون برای نمایش‌ها
+TZ = "Europe/Berlin"
+
+# --- Payment verification (BSC / BEP20) ---
+PAYMENT_NETWORK = "BSC" # BSC | OFF
+PAYMENT_TOKEN_CONTRACT = "0x55d398326f99059fF775485246999027B3197955" # USDT BEP20 (default)
+AUTO_VERIFY_PAYMENTS = "OFF" # اگر ON باشد Cron تلاش می‌کند پرداخت‌های PENDING را verify و auto-approve کند (پیشنهاد: OFF)
+MIN_CONFIRMATIONS = "3"
