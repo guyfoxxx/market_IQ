@@ -300,8 +300,6 @@ ${codes}
   });
 
   bot.command("profile", async (ctx) => {
-    await showProfile(ctx);
-  });
 
   
 
