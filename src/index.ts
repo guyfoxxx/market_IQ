@@ -65,9 +65,10 @@ export default {
           u.customPrompt = { ready: true, text: task.promptText, generatedAt: u.customPrompt?.generatedAt };
           await putUser(env, u);
 
- await bot.api.sendMessage(task.userId, "✅ پرامپت اختصاصی شما آماده شد:
-
-" + task.promptText);
+ await bot.api.sendMessage(
+  task.userId,
+  `✅ پرامپت اختصاصی شما آماده شد:\n\n${task.promptText}`
+);
           await markCustomPromptSent(env, task.userId);
         } catch (e) {
           console.log("cron error", e);
