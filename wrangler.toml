@@ -66,10 +66,6 @@ TZ = "Europe/Berlin"
 binding = "JOBS"
 queue = "valinaf25-jobs"
 
-[[queues.consumers]]
-queue = "valinaf25-jobs"
-max_batch_size = 5
-max_batch_timeout = 30
 
 # Optional R2 bucket for assets (create bucket "valinaf25-assets")
 [[r2_buckets]]
