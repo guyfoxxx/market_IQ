@@ -1,5 +1,5 @@
 name = "marketiq"
-main = "src/index.ts"
+main = "src/index (2).js"
 compatibility_date = "2026-02-04"
 compatibility_flags = ["nodejs_compat"]
 
