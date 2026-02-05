@@ -5,6 +5,7 @@ export interface Env {
   WEBHOOK_SECRET: string;
 
   USERS_KV: KVNamespace;
+  JOBS?: any;
 
   // Optional secrets
   OPENAI_API_KEY?: string;

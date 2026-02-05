@@ -1,4 +1,4 @@
-import type { Market, Timeframe, RiskLevel } from "../types";
+import type { Market, Timeframe, Risk } from "../types";
 import type { Candle } from "./data";
 
 export function buildAnalysisPrompt(args: {
@@ -9,7 +9,7 @@ export function buildAnalysisPrompt(args: {
   normalizedSymbol: string;
   dataSource: string;
   timeframe: Timeframe;
-  risk: RiskLevel;
+  risk: Risk;
   news: boolean;
   candles: Candle[];
 }) {

@@ -9,8 +9,8 @@ export type Job =
       market: Market;
       symbol: string;
       timeframe: Timeframe;
-      style: TradeStyle;
-      risk: RiskLevel;
+      style: Style;
+      risk: Risk;
       news: boolean;
     }
   | {
