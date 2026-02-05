@@ -61,11 +61,7 @@ TZ = "Europe/Berlin"
 
 
 # --- Queue-first scaling (100k users friendly) ---
-# Create a Queue named "valinaf25-jobs" in Cloudflare dashboard.
-[[queues.producers]]
-binding = "JOBS"
-queue = "valinaf25-jobs"
-
+# Create a Queue named "valinaf25-jobs" in 
 
 # Optional R2 bucket for assets (create bucket "valinaf25-assets")
 [[r2_buckets]]
