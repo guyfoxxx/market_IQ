@@ -1,5 +1,5 @@
 name = "marketiqs"
-main = "src/index1.js"
+main = "index (4).js"
 compatibility_date = "2026-02-04"
 compatibility_flags = ["nodejs_compat"]
 
@@ -8,7 +8,7 @@ compatibility_flags = ["nodejs_compat"]
 crons = ["*/5 * * * *"]
 
 [[kv_namespaces]]
-binding = "USERS_KV"
+binding = "BOT_KV"
 
 id = "8b953a37d3ef4e92a44d99d7ea3fe911"
 
