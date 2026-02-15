@@ -7,7 +7,7 @@ export default {
 
       // ===== MINI APP (inline) =====
       // Serve app.js from root and nested miniapp paths (e.g. /miniapp/app.js)
-      if (request.method === "GET" && (url.pathname === "/app.js" || url.pathname.endsWith("/app.js") || url.pathname === "/app.v20260215a.js" || url.pathname.endsWith("/app.v20260215a.js"))) {
+      if (request.method === "GET" && (url.pathname === "/app.js" || url.pathname.endsWith("/app.js") || url.pathname === "/app.v20260215b.js" || url.pathname.endsWith("/app.v20260215b.js"))) {
         return jsResponse(MINI_APP_JS);
       }
       // Serve Mini App shell on root and non-API clean paths (e.g. /miniapp)
@@ -5363,7 +5363,7 @@ function timingSafeEqualHex(a, b) {
 }
 
 /* ========================== MINI APP UI (MODERN TRADING) ========================== */
-const MINI_APP_HTML = `<!doctype html>
+const MINI_APP_HTML = String.raw`<!doctype html>
 <html lang="fa" dir="rtl">
 <head>
   <meta charset="utf-8" />
@@ -6033,11 +6033,11 @@ const MINI_APP_HTML = `<!doctype html>
         <div class="badge" id="toastB">—</div>
       </div>
 
-      <script src="app.v20260215a.js"></script>
+      <script src="app.v20260215b.js"></script>
 </body>
 </html>`;
 
-const MINI_APP_JS = `var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16;
+const MINI_APP_JS = String.raw`var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16;
 const tg = (_a = window.Telegram) === null || _a === void 0 ? void 0 : _a.WebApp;
 if (tg)
     tg.ready();
