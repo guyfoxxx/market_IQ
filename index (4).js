@@ -5272,7 +5272,7 @@ async function verifyMiniappToken(token, env) {
     const j = JSON.parse(raw);
     const userId = String(j?.userId || "").trim();
     if (!userId) return { ok: false, reason: "token_user_missing" };
-    return { ok: true, userId, fromLike: { id: String(userId), username: String(j?.username || "") }, via: "mini_token" };
+    return { ok: true, userId, fromLike: { username: String(j?.username || "") }, via: "mini_token" };
   } catch {
     return { ok: false, reason: "token_bad_json" };
   }
@@ -5286,11 +5286,11 @@ async function verifyMiniappAuth(body, env) {
     const adminTok = String(env.WEB_ADMIN_TOKEN || "").trim();
     if (ownerTok && timingSafeEqual(webToken, ownerTok)) {
       const username = firstHandleFromCsv(env.OWNER_HANDLES) || "owner";
-      return { ok: true, userId: 999000001, fromLike: { id: "999000001", username } };
+      return { ok: true, userId: 999000001, fromLike: { username } };
     }
     if (adminTok && timingSafeEqual(webToken, adminTok)) {
       const username = firstHandleFromCsv(env.ADMIN_HANDLES) || firstHandleFromCsv(env.OWNER_HANDLES) || "admin";
-      return { ok: true, userId: 999000002, fromLike: { id: "999000002", username } };
+      return { ok: true, userId: 999000002, fromLike: { username } };
     }
   }
 
@@ -5315,7 +5315,7 @@ async function verifyTelegramInitData(initData, botToken, maxAgeSecRaw, lenientR
   const initRaw = String(initData || "").trim();
   if (lenient && initRaw.startsWith("dev:")) {
     const devId = Number(initRaw.split(":")[1] || "0") || 999001;
-    return { ok: true, userId: devId, fromLike: { id: String(devId), username: "dev_user" } };
+    return { ok: true, userId: devId, fromLike: { username: "dev_user" } };
   }
   if (!botToken && !lenient) return { ok: false, reason: "bot_token_missing" };
 
@@ -5344,7 +5344,7 @@ async function verifyTelegramInitData(initData, botToken, maxAgeSecRaw, lenientR
   const userId = user?.id || Number(params.get("user_id") || "0");
   if (!userId) return { ok: false, reason: "user_missing" };
 
-  const fromLike = { id: String(userId), username: user?.username || "", first_name: user?.first_name || "", last_name: user?.last_name || "", language_code: user?.language_code || "" };
+  const fromLike = { username: user?.username || "", first_name: user?.first_name || "", last_name: user?.last_name || "", language_code: user?.language_code || "" };
   return { ok: true, userId, fromLike };
 }
 
@@ -7035,6 +7035,13 @@ async function boot() {
     IS_STAFF = !!json.isStaff;
     IS_OWNER = json.role === "owner";
     IS_GUEST = !!json.guest;
+    if (IS_GUEST) {
+        const ae = String(json.authError || "").trim();
+        if (ae) {
+            out.textContent = "\u062D\u0627\u0644\u062A \u0645\u0647\u0645\u0627\u0646 \u0641\u0639\u0627\u0644 \u0634\u062F. \u062E\u0637\u0627\u06CC \u0627\u062D\u0631\u0627\u0632: " + ae + "\n\n" + MINIAPP_EXEC_CHECKLIST_TEXT;
+            showToast("\u062D\u0627\u0644\u062A \u0645\u0647\u0645\u0627\u0646", "Auth: " + ae, "GUEST", false);
+        }
+    }
     const adminTabBtn = document.querySelector('.tab-btn[data-tab="admin"]');
     const ownerTabBtn = document.querySelector('.tab-btn[data-tab="owner"]');
     if (adminTabBtn)
