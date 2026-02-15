@@ -6137,16 +6137,23 @@ const MINIAPP_EXEC_CHECKLIST = [
     "6) \u0627\u06AF\u0631 \u0647\u0646\u0648\u0632 \u0648\u0635\u0644 \u0646\u0634\u062F\u060C \u0644\u0627\u06AF /health \u0648 \u067E\u0627\u0633\u062E /api/user \u0631\u0627 \u0628\u0631\u0627\u06CC \u067E\u0634\u062A\u06CC\u0628\u0627\u0646\u06CC \u0627\u0631\u0633\u0627\u0644 \u06A9\u0646\u06CC\u062F."
 ].join("\n");
 const MINIAPP_EXEC_CHECKLIST_TEXT = MINIAPP_EXEC_CHECKLIST;
+function isSignedInitData(v) {
+    const s = String(v || "");
+    return /(^|[?&])hash=/.test(s);
+}
 function getFreshInitData() {
     const latestTg = ((tg === null || tg === void 0 ? void 0 : tg.initData) || "").trim();
-    if (latestTg) {
+    const latestOk = latestTg && isSignedInitData(latestTg);
+    const currentOk = INIT_DATA && isSignedInitData(INIT_DATA);
+    if (latestOk) {
         INIT_DATA = latestTg;
         try {
             localStorage.setItem(LOCAL_KEYS.initData, latestTg);
         }
         catch (_a) { }
     }
-    return INIT_DATA || latestTg || "";
+    const out = (currentOk ? INIT_DATA : "") || (latestOk ? latestTg : "") || "";
+    return out;
 }
 function buildAuthBody(extra = {}) {
     const webToken = getParamEverywhere("access") || getParamEverywhere("webToken") || "";
@@ -6922,8 +6929,21 @@ async function boot() {
         setupNewsPolling();
     }
     const isTelegramRuntime = !!((_a = window.Telegram) === null || _a === void 0 ? void 0 : _a.WebApp);
-    const qsInitData = getParamEverywhere("initData") || "";
-    const savedInitData = localStorage.getItem(LOCAL_KEYS.initData) || "";
+    const qsInitData = (() => {
+        const v = getParamEverywhere("initData") || "";
+        return v && isSignedInitData(v) ? v : "";
+    })();
+    const savedInitData = (() => {
+        const v = localStorage.getItem(LOCAL_KEYS.initData) || "";
+        if (v && !isSignedInitData(v)) {
+            try {
+                localStorage.removeItem(LOCAL_KEYS.initData);
+            }
+            catch (_a) { }
+            return "";
+        }
+        return v;
+    })();
     const qsMiniToken = getParamEverywhere("miniToken") || getParamEverywhere("token") || "";
     const startParamToken = parseMiniTokenStartParam(((_b = tg === null || tg === void 0 ? void 0 : tg.initDataUnsafe) === null || _b === void 0 ? void 0 : _b.start_param) || "");
     const savedMiniToken = localStorage.getItem(LOCAL_KEYS.miniToken) || "";
@@ -6936,12 +6956,19 @@ async function boot() {
         catch (_c) { }
     }
     let initData = ((tg === null || tg === void 0 ? void 0 : tg.initData) || "").trim();
+    if (initData && !isSignedInitData(initData))
+        initData = "";
     // Telegram WebApp may populate initData with a slight delay.
     if (isTelegramRuntime && !initData) {
-        await new Promise((r) => setTimeout(r, 350));
-        initData = ((tg === null || tg === void 0 ? void 0 : tg.initData) || "").trim();
+        for (const d of [350, 700, 1200]) {
+            await new Promise((r) => setTimeout(r, d));
+            initData = ((tg === null || tg === void 0 ? void 0 : tg.initData) || "").trim();
+            if (initData && isSignedInitData(initData))
+                break;
+            initData = "";
+        }
     }
-    if (initData) {
+    if (initData && isSignedInitData(initData)) {
         INIT_DATA = initData;
         localStorage.setItem(LOCAL_KEYS.initData, initData);
     }
@@ -6963,6 +6990,15 @@ async function boot() {
         showToast("\u062D\u0627\u0644\u062A \u0645\u0647\u0645\u0627\u0646", "\u0627\u062A\u0635\u0627\u0644 \u0627\u062D\u0631\u0627\u0632 \u0646\u0634\u062F\u0647\u061B \u0627\u062C\u0631\u0627\u06CC \u0645\u062D\u062F\u0648\u062F \u0628\u0627 \u062F\u0627\u062F\u0647 \u0639\u0645\u0648\u0645\u06CC", "GUEST", false);
     }
     let { status, json } = await api("/api/user", buildAuthBody({ allowGuest: true }));
+    if ((json === null || json === void 0 ? void 0 : json.guest) && (json === null || json === void 0 ? void 0 : json.authError)) {
+        const ae = String(json.authError || "");
+        if (ae === "hash_missing" || ae === "initData_missing") {
+            try {
+                localStorage.removeItem(LOCAL_KEYS.initData);
+            }
+            catch (_c) { }
+        }
+    }
     if (!(json === null || json === void 0 ? void 0 : json.ok) && status === 401 && (MINI_TOKEN || localStorage.getItem(LOCAL_KEYS.miniToken))) {
         const initBackup = INIT_DATA;
         INIT_DATA = "";
