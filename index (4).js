@@ -934,7 +934,7 @@ TxID: ${txid}
 };
 
 /* ========================== BRAND / COPY ========================== */
-const MINIAPP_EXEC_CHECKLIST = [
+const MINIAPP_EXEC_CHECKLIST_TEXT = [
   "✅ دامنه را در BotFather > Bot Settings > Domain ثبت کن",
   "✅ Menu Button را روی MINIAPP_URL تنظیم کن",
   "✅ Worker با RootPath درست Deploy شده باشد (مثلاً /bot)",
@@ -3975,7 +3975,7 @@ ${summary || "تحلیل خبری در دسترس نیست."}`, mainMenuKeyboard
 
 از دکمه زیر وارد شوید. اگر دکمه باز نشد، این لینک را مستقیم باز کنید:
 ${finalUrl}\n\nچک‌لیست سریع اتصال:
-${MINIAPP_EXEC_CHECKLIST}`, kbInline);
+${MINIAPP_EXEC_CHECKLIST_TEXT}`, kbInline);
     }
 
 
@@ -5272,7 +5272,7 @@ async function verifyMiniappToken(token, env) {
     const j = JSON.parse(raw);
     const userId = String(j?.userId || "").trim();
     if (!userId) return { ok: false, reason: "token_user_missing" };
-    return { ok: true, userId, fromLike: { id: String(userId), username: String(j?.username || "") }, via: "mini_token" };
+    return { ok: true, userId, fromLike: { username: String(j?.username || "") }, via: "mini_token" };
   } catch {
     return { ok: false, reason: "token_bad_json" };
   }
@@ -5286,11 +5286,11 @@ async function verifyMiniappAuth(body, env) {
     const adminTok = String(env.WEB_ADMIN_TOKEN || "").trim();
     if (ownerTok && timingSafeEqual(webToken, ownerTok)) {
       const username = firstHandleFromCsv(env.OWNER_HANDLES) || "owner";
-      return { ok: true, userId: 999000001, fromLike: { id: "999000001", username } };
+      return { ok: true, userId: 999000001, fromLike: { username } };
     }
     if (adminTok && timingSafeEqual(webToken, adminTok)) {
       const username = firstHandleFromCsv(env.ADMIN_HANDLES) || firstHandleFromCsv(env.OWNER_HANDLES) || "admin";
-      return { ok: true, userId: 999000002, fromLike: { id: "999000002", username } };
+      return { ok: true, userId: 999000002, fromLike: { username } };
     }
   }
 
@@ -5315,7 +5315,7 @@ async function verifyTelegramInitData(initData, botToken, maxAgeSecRaw, lenientR
   const initRaw = String(initData || "").trim();
   if (lenient && initRaw.startsWith("dev:")) {
     const devId = Number(initRaw.split(":")[1] || "0") || 999001;
-    return { ok: true, userId: devId, fromLike: { id: String(devId), username: "dev_user" } };
+    return { ok: true, userId: devId, fromLike: { username: "dev_user" } };
   }
   if (!botToken && !lenient) return { ok: false, reason: "bot_token_missing" };
 
@@ -5344,7 +5344,7 @@ async function verifyTelegramInitData(initData, botToken, maxAgeSecRaw, lenientR
   const userId = user?.id || Number(params.get("user_id") || "0");
   if (!userId) return { ok: false, reason: "user_missing" };
 
-  const fromLike = { id: String(userId), username: user?.username || "", first_name: user?.first_name || "", last_name: user?.last_name || "", language_code: user?.language_code || "" };
+  const fromLike = { username: user?.username || "", first_name: user?.first_name || "", last_name: user?.last_name || "", language_code: user?.language_code || "" };
   return { ok: true, userId, fromLike };
 }
 
@@ -6098,7 +6098,6 @@ let OFFLINE_MODE = false;
 const LOCAL_KEYS = {
     initData: "miniapp_init_data",
     miniToken: "miniapp_auth_token",
-    webToken: "miniapp_web_token",
     userState: "miniapp_cached_user_state_v1",
     quoteCache: "miniapp_quote_cache_v1",
     newsCache: "miniapp_news_cache_v1",
@@ -6149,7 +6148,7 @@ function getFreshInitData() {
     return INIT_DATA || latestTg || "";
 }
 function buildAuthBody(extra = {}) {
-    const webToken = getParamEverywhere("access") || getParamEverywhere("webToken") || localStorage.getItem(LOCAL_KEYS.webToken) || "";
+    const webToken = getParamEverywhere("access") || getParamEverywhere("webToken") || "";
     return Object.assign({ initData: getFreshInitData(), miniToken: MINI_TOKEN || localStorage.getItem(LOCAL_KEYS.miniToken) || "", webToken }, extra);
 }
 function parseMiniTokenStartParam(raw) {
@@ -6342,7 +6341,7 @@ function prettyErr(j, status) {
     if (status === 401) {
         if (String(e).includes("initData"))
             return "\u0627\u062A\u0635\u0627\u0644 \u0645\u06CC\u0646\u06CC\u200C\u0627\u067E \u0645\u0646\u0642\u0636\u06CC \u0634\u062F\u0647\u061B \u0627\u067E \u0631\u0627 \u0645\u062C\u062F\u062F \u0627\u0632 \u062F\u0627\u062E\u0644 \u062A\u0644\u06AF\u0631\u0627\u0645 \u0628\u0627\u0632 \u06A9\u0646\u06CC\u062F.";
-        return "\u0627\u062D\u0631\u0627\u0632 \u0647\u0648\u06CC\u062A \u062A\u0644\u06AF\u0631\u0627\u0645 \u0646\u0627\u0645\u0648\u0641\u0642 \u0627\u0633\u062A.\n\n" + MINIAPP_EXEC_CHECKLIST;
+        return "\u0627\u062D\u0631\u0627\u0632 \u0647\u0648\u06CC\u062A \u062A\u0644\u06AF\u0631\u0627\u0645 \u0646\u0627\u0645\u0648\u0641\u0642 \u0627\u0633\u062A.\n\n" + MINIAPP_EXEC_CHECKLIST_TEXT;
     }
     return "\u0645\u0634\u06A9\u0644\u06CC \u067E\u06CC\u0634 \u0622\u0645\u062F. \u0644\u0637\u0641\u0627\u064B \u062F\u0648\u0628\u0627\u0631\u0647 \u062A\u0644\u0627\u0634 \u06A9\u0646\u06CC\u062F.";
 }
@@ -6922,20 +6921,6 @@ async function boot() {
         setupNewsPolling();
     }
     const isTelegramRuntime = !!((_a = window.Telegram) === null || _a === void 0 ? void 0 : _a.WebApp);
-    // Web runtime (خارج تلگرام): اگر initData نداریم، از WEB_OWNER_TOKEN / WEB_ADMIN_TOKEN استفاده کن
-    if (!isTelegramRuntime) {
-        try {
-            const existingWebToken = (getParamEverywhere("access") || getParamEverywhere("webToken") || localStorage.getItem(LOCAL_KEYS.webToken) || "").trim();
-            if (!existingWebToken) {
-                const t = prompt("برای باز کردن پنل در مرورگر، WEB_OWNER_TOKEN یا WEB_ADMIN_TOKEN را وارد کنید:
-(اگر داخل تلگرام هستید Cancel بزنید)");
-                if (t && String(t).trim()) {
-                    localStorage.setItem(LOCAL_KEYS.webToken, String(t).trim());
-                }
-            }
-        }
-        catch (_c) { }
-    }
     const qsInitData = getParamEverywhere("initData") || "";
     const savedInitData = localStorage.getItem(LOCAL_KEYS.initData) || "";
     const qsMiniToken = getParamEverywhere("miniToken") || getParamEverywhere("token") || "";
@@ -7014,7 +6999,7 @@ async function boot() {
             out.textContent = "\u062D\u0627\u0644\u062A \u0645\u062D\u062F\u0648\u062F \u0641\u0639\u0627\u0644 \u0634\u062F \u2705 \u062F\u0627\u062F\u0647\u200C\u0647\u0627\u06CC \u067E\u0627\u06CC\u0647 \u0628\u0627\u0631\u06AF\u0630\u0627\u0631\u06CC \u0634\u062F\u0646\u062F.";
             showToast("\u062D\u0627\u0644\u062A \u0645\u062D\u062F\u0648\u062F", "\u0628\u0631\u0627\u06CC \u0647\u0645\u0647 \u0627\u0645\u06A9\u0627\u0646\u0627\u062A\u060C \u0645\u06CC\u0646\u06CC\u200C\u0627\u067E \u0631\u0627 \u0627\u0632 \u062F\u0627\u062E\u0644 \u062A\u0644\u06AF\u0631\u0627\u0645 \u0628\u0627\u0632 \u06A9\u0646\u06CC\u062F.", "GUEST", false);
             if (status === 401)
-                out.textContent = "\u0627\u062A\u0635\u0627\u0644 \u06A9\u0627\u0645\u0644 \u0628\u0631\u0642\u0631\u0627\u0631 \u0646\u0634\u062F.\n\n" + MINIAPP_EXEC_CHECKLIST;
+                out.textContent = "\u0627\u062A\u0635\u0627\u0644 \u06A9\u0627\u0645\u0644 \u0628\u0631\u0642\u0631\u0627\u0631 \u0646\u0634\u062F.\n\n" + MINIAPP_EXEC_CHECKLIST_TEXT;
             setupLiveQuotePolling();
             setupNewsPolling();
             return;
@@ -7050,6 +7035,13 @@ async function boot() {
     IS_STAFF = !!json.isStaff;
     IS_OWNER = json.role === "owner";
     IS_GUEST = !!json.guest;
+    if (IS_GUEST) {
+        const ae = String(json.authError || "").trim();
+        if (ae) {
+            out.textContent = "\u062D\u0627\u0644\u062A \u0645\u0647\u0645\u0627\u0646 \u0641\u0639\u0627\u0644 \u0634\u062F. \u062E\u0637\u0627\u06CC \u0627\u062D\u0631\u0627\u0632: " + ae + "\n\n" + MINIAPP_EXEC_CHECKLIST_TEXT;
+            showToast("\u062D\u0627\u0644\u062A \u0645\u0647\u0645\u0627\u0646", "Auth: " + ae, "GUEST", false);
+        }
+    }
     const adminTabBtn = document.querySelector('.tab-btn[data-tab="admin"]');
     const ownerTabBtn = document.querySelector('.tab-btn[data-tab="owner"]');
     if (adminTabBtn)
