@@ -3,7 +3,7 @@ export default {
     try {
       const url = new URL(request.url);
 
-      if (url.pathname === "/health") return new Response("ok", { status: 200 });
+      if (pathEndsWith(url.pathname, "/health")) return new Response("ok", { status: 200 });
 
       // ===== MINI APP (inline) =====
       // Serve app.js from root and nested miniapp paths (e.g. /miniapp/app.js)
@@ -14,15 +14,15 @@ export default {
       if (
         request.method === "GET" &&
         url.pathname !== "/health" &&
-        !url.pathname.startsWith("/api/") &&
-        !url.pathname.startsWith("/telegram/") &&
+        !pathIncludes(url.pathname, "/api/") &&
+        !pathIncludes(url.pathname, "/telegram/") &&
         !url.pathname.endsWith(".js")
       ) {
         return htmlResponse(MINI_APP_HTML);
       }
 
       // ===== MINI APP APIs =====
-      if (url.pathname === "/api/user" && request.method === "POST") {
+      if (pathEndsWith(url.pathname, "/api/user") && request.method === "POST") {
         const body = await request.json().catch(() => null);
         if (!body) return jsonResponse({ ok: false, error: "bad_json" }, 400);
         const v = await verifyMiniappAuth(body, env);
@@ -36,7 +36,7 @@ export default {
         const st = await ensureUser(v.userId, env, v.fromLike);
         applyLocaleFromTelegramUser(st, v.fromLike || {});
         if (env.BOT_KV) await saveUser(v.userId, st, env);
-        const quota = isStaff(v.fromLike, env) ? "∞" : `${st.dailyUsed}/${dailyLimit(env, st)}`;
+        const quota = isStaff(v.fromLike, env) ? "∞" : `points:${Number(st.points?.balance || 0)}`;
         const symbols = [...MAJORS, ...METALS, ...INDICES, ...CRYPTOS];
         const miniToken = await issueMiniappToken(env, v.userId, v.fromLike || {});
         const styles = await getStyleList(env);
@@ -67,7 +67,7 @@ export default {
         });
       }
 
-      if (url.pathname === "/api/settings" && request.method === "POST") {
+      if (pathEndsWith(url.pathname, "/api/settings") && request.method === "POST") {
         const body = await request.json().catch(() => null);
         if (!body) return jsonResponse({ ok: false, error: "bad_json" }, 400);
 
@@ -122,8 +122,8 @@ export default {
         if (!v.ok) return jsonResponse({ ok: false, error: v.reason }, 401);
         if (!isStaff(v.fromLike, env)) return jsonResponse({ ok: false, error: "forbidden" }, 403);
 
-        if (url.pathname === "/api/admin/bootstrap") {
-          const [prompt, styles, commission, offerBanner, offerBannerImage, payments, stylePrompts, customPrompts, freeDailyLimit, withdrawals, tickets, adminFlags, welcomeBot, welcomeMiniapp] = await Promise.all([
+        if (pathEndsWith(url.pathname, "/api/admin/bootstrap")) {
+          const [prompt, styles, commission, offerBanner, offerBannerImage, payments, stylePrompts, customPrompts, freeDailyLimit, basePoints, withdrawals, tickets, adminFlags, welcomeBot, welcomeMiniapp] = await Promise.all([
             getAnalysisPrompt(env),
             getStyleList(env),
             getCommissionSettings(env),
@@ -133,22 +133,23 @@ export default {
             getStylePromptMap(env),
             getCustomPrompts(env),
             getFreeDailyLimit(env),
+            getBasePoints(env),
             listWithdrawals(env, 100),
             listSupportTickets(env, 100),
             getAdminFlags(env),
             getBotWelcomeText(env),
             getMiniappWelcomeText(env),
           ]);
-          return jsonResponse({ ok: true, prompt, styles, commission, offerBanner, offerBannerImage, payments, stylePrompts, customPrompts, freeDailyLimit, withdrawals, tickets, adminFlags, welcomeBot, welcomeMiniapp });
+          return jsonResponse({ ok: true, prompt, styles, commission, offerBanner, offerBannerImage, payments, stylePrompts, customPrompts, freeDailyLimit, basePoints, withdrawals, tickets, adminFlags, welcomeBot, welcomeMiniapp });
         }
 
-        if (url.pathname === "/api/admin/welcome") {
+        if (pathEndsWith(url.pathname, "/api/admin/welcome")) {
           if (typeof body.welcomeBot === "string") await setBotWelcomeText(env, body.welcomeBot);
           if (typeof body.welcomeMiniapp === "string") await setMiniappWelcomeText(env, body.welcomeMiniapp);
           return jsonResponse({ ok: true, welcomeBot: await getBotWelcomeText(env), welcomeMiniapp: await getMiniappWelcomeText(env) });
         }
 
-        if (url.pathname === "/api/admin/wallet") {
+        if (pathEndsWith(url.pathname, "/api/admin/wallet")) {
           if (!isOwner(v.fromLike, env)) return jsonResponse({ ok: false, error: "forbidden" }, 403);
           if (!env.BOT_KV) return jsonResponse({ ok: false, error: "bot_kv_missing" }, 500);
           const wallet = typeof body.wallet === "string" ? body.wallet.trim() : null;
@@ -158,13 +159,13 @@ export default {
           return jsonResponse({ ok: true, wallet: await getWallet(env) });
         }
 
-        if (url.pathname === "/api/admin/tickets/list") {
+        if (pathEndsWith(url.pathname, "/api/admin/tickets/list")) {
           const limit = Math.min(300, Math.max(1, Number(body.limit || 100)));
           const tickets = await listSupportTickets(env, limit);
           return jsonResponse({ ok: true, tickets });
         }
 
-        if (url.pathname === "/api/admin/tickets/update") {
+        if (pathEndsWith(url.pathname, "/api/admin/tickets/update")) {
           const id = String(body.id || "").trim();
           const status = String(body.status || "").trim();
           const reply = String(body.reply || "").trim();
@@ -204,7 +205,7 @@ ${reply}`;
           return jsonResponse({ ok: true, ticket: updated });
         }
 
-        if (url.pathname === "/api/admin/prompt") {
+        if (pathEndsWith(url.pathname, "/api/admin/prompt")) {
           if (typeof body.prompt === "string" && env.BOT_KV) {
             await env.BOT_KV.put("settings:analysis_prompt", body.prompt.trim());
           }
@@ -212,7 +213,7 @@ ${reply}`;
           return jsonResponse({ ok: true, prompt });
         }
 
-        if (url.pathname === "/api/admin/styles") {
+        if (pathEndsWith(url.pathname, "/api/admin/styles")) {
           const list = await getStyleList(env);
           const action = String(body.action || "");
           const style = String(body.style || "").trim();
@@ -226,7 +227,7 @@ ${reply}`;
           return jsonResponse({ ok: true, styles: await getStyleList(env) });
         }
 
-        if (url.pathname === "/api/admin/style-prompts") {
+        if (pathEndsWith(url.pathname, "/api/admin/style-prompts")) {
           const map = await getStylePromptMap(env);
           if (typeof body.stylePrompts === "object" && body.stylePrompts) {
             await setStylePromptMap(env, body.stylePrompts);
@@ -234,20 +235,27 @@ ${reply}`;
           return jsonResponse({ ok: true, stylePrompts: await getStylePromptMap(env) });
         }
 
-        if (url.pathname === "/api/admin/custom-prompts") {
+        if (pathEndsWith(url.pathname, "/api/admin/custom-prompts")) {
           if (Array.isArray(body.customPrompts)) {
             await setCustomPrompts(env, body.customPrompts);
           }
           return jsonResponse({ ok: true, customPrompts: await getCustomPrompts(env) });
         }
 
-        if (url.pathname === "/api/admin/free-limit") {
+        if (pathEndsWith(url.pathname, "/api/admin/free-limit")) {
           const limit = toInt(body.limit, 3);
           await setFreeDailyLimit(env, limit);
           return jsonResponse({ ok: true, freeDailyLimit: await getFreeDailyLimit(env) });
         }
 
-        if (url.pathname === "/api/admin/features") {
+        if (pathEndsWith(url.pathname, "/api/admin/points/base")) {
+          const points = toInt(body.basePoints, 0);
+          await setBasePoints(env, points);
+          return jsonResponse({ ok: true, basePoints: await getBasePoints(env) });
+        }
+
+
+        if (pathEndsWith(url.pathname, "/api/admin/features")) {
           if (!isOwner(v.fromLike, env)) return jsonResponse({ ok: false, error: "forbidden" }, 403);
           const flags = await getAdminFlags(env);
           if (typeof body.capitalModeEnabled === "boolean") flags.capitalModeEnabled = body.capitalModeEnabled;
@@ -257,7 +265,7 @@ ${reply}`;
         }
 
 
-        if (url.pathname === "/api/admin/offer") {
+        if (pathEndsWith(url.pathname, "/api/admin/offer")) {
           if (typeof body.offerBanner === "string" && env.BOT_KV) {
             await setOfferBanner(env, body.offerBanner);
           }
@@ -273,7 +281,7 @@ ${reply}`;
           return jsonResponse({ ok: true, offerBanner: await getOfferBanner(env), offerBannerImage: await getOfferBannerImage(env) });
         }
 
-        if (url.pathname === "/api/admin/commissions") {
+        if (pathEndsWith(url.pathname, "/api/admin/commissions")) {
           const settings = await getCommissionSettings(env);
           const action = String(body.action || "");
           if (action === "setGlobal" && Number.isFinite(Number(body.percent))) {
@@ -292,7 +300,7 @@ ${reply}`;
           return jsonResponse({ ok: true, commission: await getCommissionSettings(env) });
         }
 
-        if (url.pathname === "/api/admin/users") {
+        if (pathEndsWith(url.pathname, "/api/admin/users")) {
           if (!isOwner(v.fromLike, env)) return jsonResponse({ ok: false, error: "forbidden" }, 403);
           const users = await listUsers(env, Number(body.limit || 100));
           const now = Date.now();
@@ -324,7 +332,7 @@ ${reply}`;
           return jsonResponse({ ok: true, users: report });
         }
 
-        if (url.pathname === "/api/admin/report/pdf") {
+        if (pathEndsWith(url.pathname, "/api/admin/report/pdf")) {
           if (!isOwner(v.fromLike, env)) return jsonResponse({ ok: false, error: "forbidden" }, 403);
           const users = await listUsers(env, Math.min(300, Math.max(1, Number(body.limit || 200))));
           const payments = await listPayments(env, 120);
@@ -342,10 +350,10 @@ ${reply}`;
           });
         }
 
-        if (url.pathname === "/api/admin/payments/list") {
+        if (pathEndsWith(url.pathname, "/api/admin/payments/list")) {
           return jsonResponse({ ok: true, payments: await listPayments(env, 100) });
         }
-        if (url.pathname === "/api/admin/capital/toggle") {
+        if (pathEndsWith(url.pathname, "/api/admin/capital/toggle")) {
           const username = String(body.username || "").trim();
           const enabled = !!body.enabled;
           const userId = await getUserIdByUsername(env, username);
@@ -358,12 +366,12 @@ ${reply}`;
         }
 
 
-        if (url.pathname === "/api/admin/withdrawals/list") {
+        if (pathEndsWith(url.pathname, "/api/admin/withdrawals/list")) {
           const withdrawals = await listWithdrawals(env, 200);
           return jsonResponse({ ok: true, withdrawals });
         }
 
-        if (url.pathname === "/api/admin/withdrawals/review") {
+        if (pathEndsWith(url.pathname, "/api/admin/withdrawals/review")) {
           const id = String(body.id || "").trim();
           const decision = String(body.decision || "").trim();
           const txHash = String(body.txHash || "").trim();
@@ -372,7 +380,7 @@ ${reply}`;
           return jsonResponse({ ok: true, withdrawal: updated });
         }
 
-        if (url.pathname === "/api/admin/payments/decision") {
+        if (pathEndsWith(url.pathname, "/api/admin/payments/decision")) {
           const paymentId = String(body.paymentId || "").trim();
           const status = String(body.status || "").trim() === "approved" ? "approved" : "rejected";
           const raw = env.BOT_KV ? await env.BOT_KV.get(`payment:${paymentId}`) : "";
@@ -388,7 +396,7 @@ ${reply}`;
         }
 
         // Backward-compat alias for older admin clients
-        if (url.pathname === "/api/admin/withdrawals/decision") {
+        if (pathEndsWith(url.pathname, "/api/admin/withdrawals/decision")) {
           const id = String(body.withdrawalId || body.id || "").trim();
           const decisionRaw = String(body.status || body.decision || "").trim();
           const decision = decisionRaw === "approved" ? "approved" : (decisionRaw === "rejected" ? "rejected" : "");
@@ -400,7 +408,7 @@ ${reply}`;
 
 
 
-        if (url.pathname === "/api/admin/payments/approve") {
+        if (pathEndsWith(url.pathname, "/api/admin/payments/approve")) {
           const username = String(body.username || "").trim();
           const userId = await getUserIdByUsername(env, username);
           if (!userId) return jsonResponse({ ok: false, error: "user_not_found" }, 404);
@@ -452,7 +460,7 @@ ${reply}`;
           return jsonResponse({ ok: true, payment, subscription: st.subscription });
         }
 
-        if (url.pathname === "/api/admin/subscription/activate") {
+        if (pathEndsWith(url.pathname, "/api/admin/subscription/activate")) {
           const username = String(body.username || "").trim();
           const userId = await getUserIdByUsername(env, username);
           if (!userId) return jsonResponse({ ok: false, error: "user_not_found" }, 404);
@@ -467,7 +475,7 @@ ${reply}`;
           return jsonResponse({ ok: true, subscription: st.subscription });
         }
 
-        if (url.pathname === "/api/admin/custom-prompts/requests") {
+        if (pathEndsWith(url.pathname, "/api/admin/custom-prompts/requests")) {
           if (String(body.action || "") === "decide") {
             const requestId = String(body.requestId || "").trim();
             const statusRaw = String(body.status || "").trim();
@@ -517,7 +525,7 @@ ${reply}`;
           return jsonResponse({ ok: true, requests: await listCustomPromptRequests(env, 200) });
         }
 
-        if (url.pathname === "/api/admin/custom-prompts/send") {
+        if (pathEndsWith(url.pathname, "/api/admin/custom-prompts/send")) {
           const username = String(body.username || "").trim();
           const promptId = String(body.promptId || "").trim();
           const userId = await getUserIdByUsername(env, username);
@@ -529,7 +537,7 @@ ${reply}`;
           return jsonResponse({ ok: true });
         }
 
-        if (url.pathname === "/api/admin/payments/check") {
+        if (pathEndsWith(url.pathname, "/api/admin/payments/check")) {
           const payload = {
             txHash: String(body.txHash || "").trim(),
             address: String(body.address || "").trim(),
@@ -540,7 +548,7 @@ ${reply}`;
         }
       }
 
-      if (url.pathname === "/api/support/ticket" && request.method === "POST") {
+      if (pathEndsWith(url.pathname, "/api/support/ticket") && request.method === "POST") {
         const body = await request.json().catch(() => null);
         if (!body) return jsonResponse({ ok: false, error: "bad_json" }, 400);
 
@@ -579,7 +587,7 @@ ${text}`);
         return jsonResponse({ ok: true, ticket, supportNotified: !!supportChatId });
       }
 
-      if (url.pathname === "/api/wallet/deposit/notify" && request.method === "POST") {
+      if (pathEndsWith(url.pathname, "/api/wallet/deposit/notify") && request.method === "POST") {
         const body = await request.json().catch(() => null);
         if (!body) return jsonResponse({ ok: false, error: "bad_json" }, 400);
         const v = await verifyTelegramInitData(body.initData, env.TELEGRAM_BOT_TOKEN, env.INITDATA_MAX_AGE_SEC, env.MINIAPP_AUTH_LENIENT);
@@ -615,10 +623,11 @@ TxID: ${txid}
         return jsonResponse({ ok: true, payment, supportNotified: !!supportChatId });
       }
 
-      if (url.pathname === "/api/chart" && request.method === "GET") {
+      if (pathEndsWith(url.pathname, "/api/chart") && request.method === "GET") {
         const symbol = String(url.searchParams.get("symbol") || "").trim().toUpperCase();
         const tf = String(url.searchParams.get("tf") || "H4").trim().toUpperCase();
         const levelsRaw = String(url.searchParams.get("levels") || "").trim();
+        const chartId = String(url.searchParams.get("id") || "").trim();
         const levels = levelsRaw
           ? levelsRaw.split(",").map((x) => Number(x)).filter((n) => Number.isFinite(n)).slice(0, 8)
           : [];
@@ -649,7 +658,14 @@ TxID: ${txid}
         }
 
         try {
-          const png = await renderQuickChartPng(env, candles, symbol, tf, levels);
+          let qcSpec = null;
+          if (chartId && env.BOT_KV) {
+            const raw = await env.BOT_KV.get(chartId);
+            if (raw) {
+              try { qcSpec = JSON.parse(raw); } catch { qcSpec = null; }
+            }
+          }
+          const png = await renderQuickChartPng(env, candles, symbol, tf, levels, qcSpec);
           return new Response(png, {
             status: 200,
             headers: {
@@ -674,7 +690,7 @@ TxID: ${txid}
         }
       }
 
-      if (url.pathname === "/api/quote" && request.method === "POST") {
+      if (pathEndsWith(url.pathname, "/api/quote") && request.method === "POST") {
         const body = await request.json().catch(() => null);
         if (!body) return jsonResponse({ ok: false, error: "bad_json" }, 400);
 
@@ -731,7 +747,7 @@ TxID: ${txid}
         return jsonResponse(quotePayload);
       }
 
-      if (url.pathname === "/api/news" && request.method === "POST") {
+      if (pathEndsWith(url.pathname, "/api/news") && request.method === "POST") {
         const body = await request.json().catch(() => null);
         if (!body) return jsonResponse({ ok: false, error: "bad_json" }, 400);
 
@@ -756,7 +772,7 @@ TxID: ${txid}
         }
       }
 
-      if (url.pathname === "/api/news/analyze" && request.method === "POST") {
+      if (pathEndsWith(url.pathname, "/api/news/analyze") && request.method === "POST") {
         const body = await request.json().catch(() => null);
         if (!body) return jsonResponse({ ok: false, error: "bad_json" }, 400);
 
@@ -781,7 +797,7 @@ TxID: ${txid}
           return jsonResponse({ ok: false, error: "news_analysis_unavailable", symbol, summary: "", articles: [] }, 502);
         }
       }
-      if (url.pathname === "/api/analyze" && request.method === "POST") {
+      if (pathEndsWith(url.pathname, "/api/analyze") && request.method === "POST") {
         const body = await request.json().catch(() => null);
         if (!body) return jsonResponse({ ok: false, error: "bad_json" }, 400);
 
@@ -804,22 +820,28 @@ TxID: ${txid}
           return jsonResponse({ ok: false, error: "onboarding_required" }, 403);
         }
 
-        if (env.BOT_KV && !canAnalyzeToday(st, v.fromLike, env)) {
-          const quota = isStaff(v.fromLike, env) ? "∞" : `${st.dailyUsed}/${dailyLimit(env, st)}`;
-          return jsonResponse({ ok: false, error: `quota_exceeded_${quota}` }, 429);
-        }
 
         const userPrompt = typeof body.userPrompt === "string" ? body.userPrompt : "";
 
+        // NEW: points-based billing for free-pro users
+        const ptsCheck = canSpendAnalysisPoints(st, v.fromLike, env);
+        if (!ptsCheck.ok) {
+          return jsonResponse({ ok: false, error: ptsCheck.reason }, 402);
+        }
+
+
         try {
           const flowTimeoutMs = Math.max(15000, Number(env.SIGNAL_FLOW_TIMEOUT_MS || 70000));
-          const result = await Promise.race([
+          const rawResult = await Promise.race([
             runSignalTextFlowReturnText(env, v.fromLike, st, symbol, userPrompt),
             timeoutPromise(flowTimeoutMs, "api_analyze_timeout"),
           ]);
+          const { cleaned: result, qc: qcRaw } = extractQcJsonAndStrip(rawResult);
           if (env.BOT_KV) {
             consumeDaily(st, v.fromLike, env);
             recordAnalysisSuccess(st);
+            // NEW: deduct points on each successful analysis (all users)
+            if (!isStaff(v.fromLike, env)) spendAnalysisPoints(st, env);
             await saveUser(v.userId, st, env);
           }
           const quota = isStaff(v.fromLike, env) ? "∞" : `${st.dailyUsed}/${dailyLimit(env, st)}`;
@@ -832,12 +854,21 @@ TxID: ${txid}
             if (String(env.QUICKCHART || "") !== "0") {
               const tf = st.timeframe || "H4";
               levels = extractLevels(result);
+              const qcSpec = normalizeQcSpec(qcRaw, levels);
               const origin = new URL(request.url).origin;
               const candles = await getMarketCandlesWithFallback(env, symbol, tf).catch(() => []);
               chartCandlesCount = Array.isArray(candles) ? candles.length : 0;
               if (Array.isArray(candles) && candles.length) {
-                chartUrl = `${origin}/api/chart?symbol=${encodeURIComponent(symbol)}&tf=${encodeURIComponent(tf)}&levels=${encodeURIComponent(levels.join(","))}`;
-                quickChartSpec = buildQuickChartSpec(candles, symbol, tf, levels);
+                let chartId = "";
+                if (env.BOT_KV) {
+                  chartId = `qc|${v.userId}|${Date.now()}`;
+                  const ttl = Number(env.CHART_SPEC_TTL_SEC || 900);
+                  await env.BOT_KV.put(chartId, JSON.stringify(qcSpec), { expirationTtl: Math.max(60, ttl) });
+                }
+                chartUrl = chartId
+                  ? `${origin}/api/chart?symbol=${encodeURIComponent(symbol)}&tf=${encodeURIComponent(tf)}&id=${encodeURIComponent(chartId)}`
+                  : `${origin}/api/chart?symbol=${encodeURIComponent(symbol)}&tf=${encodeURIComponent(tf)}&levels=${encodeURIComponent(levels.join(","))}`;
+                quickChartSpec = buildQuickChartSpec(candles, symbol, tf, levels, qcSpec);
               } else if (levels.length) {
                 chartUrl = buildQuickChartLevelsOnlyUrl(symbol, tf, levels);
                 quickChartSpec = { fallback: "levels_only", symbol, timeframe: tf, levels };
@@ -868,9 +899,11 @@ TxID: ${txid}
         }
       }
 
-      // Telegram webhook route: /telegram/<secret>
-      if (url.pathname.startsWith("/telegram/")) {
-        const secret = url.pathname.split("/")[2] || "";
+      // Telegram webhook route: /telegram/<secret> (supports rootpath prefixes like /bot/telegram/<secret>)
+      if (pathIncludes(url.pathname, "/telegram/")) {
+        const parts = url.pathname.split("/").filter(Boolean);
+        const tIdx = parts.indexOf("telegram");
+        const secret = tIdx >= 0 ? (parts[tIdx + 1] || "") : "";
         if (!env.TELEGRAM_WEBHOOK_SECRET || secret !== String(env.TELEGRAM_WEBHOOK_SECRET)) {
           return new Response("forbidden", { status: 403 });
         }
@@ -879,7 +912,6 @@ TxID: ${txid}
         const update = await request.json().catch(() => null);
         if (!update) return new Response("bad request", { status: 400 });
 
-        // respond fast; do heavy work in waitUntil
         ctx.waitUntil(handleUpdate(update, env));
         return new Response("ok", { status: 200 });
       }
@@ -900,6 +932,14 @@ TxID: ${txid}
 };
 
 /* ========================== BRAND / COPY ========================== */
+const MINIAPP_EXEC_CHECKLIST_TEXT = [
+  "✅ دامنه را در BotFather > Bot Settings > Domain ثبت کن",
+  "✅ Menu Button را روی MINIAPP_URL تنظیم کن",
+  "✅ Worker با RootPath درست Deploy شده باشد (مثلاً /bot)",
+  "✅ WEB_ADMIN_TOKEN/WEB_OWNER_TOKEN فقط برای وب (خارج تلگرام) است",
+  "✅ داخل تلگرام Mini App باید initData داشته باشد",
+].join("\n");
+
 const BOT_NAME = "MarketiQ";
 const WELCOME_BOT =
 `🎯 متن خوش‌آمدگویی بات تلگرام MarketiQ
@@ -930,11 +970,8 @@ const WELCOME_BOT =
 ────────────────────────
 
 🚀 شروع کنید
-/start | شروع تحلیل
-/signals | سیگنال‌ها
-/education | آموزش و مفاهیم بازار
-/support | پشتیبانی
-
+/signals
+/support
 ────────────────────────
 
 ⚠️ سلب مسئولیت:
@@ -1061,7 +1098,7 @@ function applyLocaleDefaults(st) {
     st.style = st.profile.preferredStyle;
   }
   if (typeof st.newsEnabled !== "boolean") st.newsEnabled = true;
-  if (!st.promptMode) st.promptMode = "style_plus_custom";
+  if (!st.promptMode) st.promptMode = "style_only";
   return st;
 }
 
@@ -1108,7 +1145,10 @@ async function finalizeOnboardingRewards(env, st) {
   const inviterId = String(st.referral.referredBy);
   const inviter = await ensureUser(inviterId, env);
   inviter.referral.successfulInvites = (inviter.referral.successfulInvites || 0) + 1;
+  // legacy referral points (kept)
   inviter.referral.points = (inviter.referral.points || 0) + 3;
+  // NEW: free-pro invite points
+  awardInvitePoints(inviter, env);
   if (inviter.referral.points >= 500) {
     inviter.referral.points -= 500;
     inviter.subscription.active = true;
@@ -1127,6 +1167,40 @@ function isStaff(from, env) {
   return isOwner(from, env) || isAdmin(from, env);
 }
 
+
+function isFreePro(st) {
+  return !!(st?.subscription?.active && (st.subscription.type === "gift" || st.subscription.type === "free_pro"));
+}
+function ensurePoints(st) {
+  if (!st.points) st.points = { balance: 0, spent: 0, earnedFromInvites: 0, initialized: false };
+  st.points.balance = Number.isFinite(Number(st.points.balance)) ? Number(st.points.balance) : 0;
+  st.points.spent = Number.isFinite(Number(st.points.spent)) ? Number(st.points.spent) : 0;
+  st.points.earnedFromInvites = Number.isFinite(Number(st.points.earnedFromInvites)) ? Number(st.points.earnedFromInvites) : 0;
+  if (typeof st.points.initialized !== "boolean") st.points.initialized = false;
+  return st;
+}
+function canSpendAnalysisPoints(st, fromLike, env) {
+  // Points are enforced for ALL users (except staff)
+  if (isStaff(fromLike, env)) return { ok: true };
+  ensurePoints(st);
+  const cost = Number(env.ANALYSIS_POINTS_COST || 2);
+  if (st.points.balance < cost) return { ok: false, reason: "insufficient_points" };
+  return { ok: true };
+}
+function spendAnalysisPoints(st, env) {
+  ensurePoints(st);
+  const cost = Number(env.ANALYSIS_POINTS_COST || 2);
+  st.points.balance = Math.max(0, Number(st.points.balance) - cost);
+  st.points.spent = Number(st.points.spent) + cost;
+}
+function awardInvitePoints(inviter, env) {
+  // each successful invite gives 1000 points if inviter is free-pro
+  if (!isFreePro(inviter)) return;
+  ensurePoints(inviter);
+  const gain = Number(env.INVITE_POINTS_GAIN || 1000);
+  inviter.points.balance = Number(inviter.points.balance) + gain;
+  inviter.points.earnedFromInvites = Number(inviter.points.earnedFromInvites) + gain;
+}
 function isOwner(from, env) {
   const u = normHandle(from?.username);
   if (!u) return false;
@@ -1144,6 +1218,13 @@ function isAdmin(from, env) {
   const set = new Set(raw.split(",").map(normHandle).filter(Boolean));
   return set.has(u);
 }
+
+function firstHandleFromCsv(raw) {
+  const s = String(raw || "").trim();
+  if (!s) return "";
+  return s.split(",").map((x) => normHandle(x)).filter(Boolean)[0] || "";
+}
+
 
 function kyivDateString(d = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {
@@ -1289,9 +1370,9 @@ const DEFAULT_ANALYSIS_PROMPT = `SYSTEM: تحلیل‌گر حرفه‌ای با�
  * into the analysis prompt. Admin can still override the global base prompt via KV.
  */
 const STYLE_PROMPTS_DEFAULT = {
-  "ICT": `{"role":"system","identity":{"title":"ICT & Smart Money Analyst","methodology":["ICT (Inner Circle Trader)","Smart Money Concepts"],"restrictions":["No indicators","No retail concepts","ICT & Smart Money concepts ONLY"]},"task":{"description":"Analyze the requested market (Symbol, Timeframe) using ICT & Smart Money Concepts ONLY."},"analysis_requirements":{"1_higher_timeframe_bias":{"timeframes":["Daily","H4"],"elements":["Overall HTF bias (Bullish / Bearish / Neutral)","Premium zone","Discount zone","Equilibrium level (50%)","Imbalance vs Balance state"]},"2_liquidity_mapping":{"identify":["Equal Highs (EQH)","Equal Lows (EQL)","Buy-side liquidity","Sell-side liquidity","Stop-loss pools"],"objective":"Determine where liquidity is resting and likely to be engineered toward"},"3_market_structure":{"elements":["BOS (Break of Structure)","MSS / CHoCH (Market Structure Shift)"],"clarification":["Manipulation phase","Expansion phase"]},"4_pd_arrays":{"arrays":["Bullish Order Blocks","Bearish Order Blocks","Fair Value Gaps (FVG)","Liquidity Voids","Previous Day High (PDH)","Previous Day Low (PDL)","Previous Week High (PWH)","Previous Week Low (PWL)"]},"5_kill_zones":{"condition":"Intraday only","zones":["London Kill Zone","New York Kill Zone"],"explanation":"Explain why timing matters for this setup"},"6_entry_model":{"model_examples":["Liquidity Sweep → MSS → FVG Entry","Liquidity Sweep → Order Block Entry"],"must_include":["Entry price","Stop Loss location (above/below OB or swing)","Take Profit targets based on liquidity"]},"7_narrative":{"storytelling":["Who is trapped?","Where did smart money enter?","Where is price likely engineered to go?"]}},"execution_plan":{"bias":"Bullish or Bearish","entry_conditions":"Clear confirmation rules","targets":"Liquidity-based targets","invalidation_point":"Price level that invalidates the idea"},"output_style":{"tone":"Professional, precise, educational","structure":"Step-by-step, clearly labeled sections","language":"Clear and technical ICT terminology"}}`,
-  "ATR": `{"role":"quantitative_trading_assistant","strategy":"ATR-based volatility trading","analysis_requirements":{"volatility_state":["Current ATR value","Comparison with historical ATR average","Volatility expansion or contraction"],"market_condition":["Trending or Ranging","Breakout vs Mean Reversion suitability"],"trade_setup":{"entry":"Based on price structure","stop_loss":"SL = Entry ± (ATR × Multiplier)","take_profit":["TP1 based on ATR expansion","TP2 based on ATR expansion"]},"position_sizing":["Risk per trade (%)","Position size based on SL distance"],"trade_filtering":["When NOT to trade based on ATR","High-risk volatility conditions (news, spikes)"],"risk_management":["Max daily loss","Max consecutive losses","ATR-based trailing stop logic"],"summary":["Statistical justification","Expected trade duration","Risk classification (Low/Medium/High)"]}}`,
-  "پرایس اکشن": `{"role":"system","description":"Professional Price Action Market Analysis Prompt","constraints":{"analysis_style":"Pure Price Action Only","indicators":"Forbidden unless explicitly requested","focus":"High-probability setups only","language":"Professional, clear, step-by-step"},"required_sections":{"market_structure":{"items":["Trend identification (Uptrend / Downtrend / Range)","HH, HL, LH, LL labeling","Structure status (Intact / BOS / MSS)"]},"key_levels":{"items":["Strong Support zones","Strong Resistance zones","Flip zones (SR to Resistance / Resistance to Support)","Psychological levels (if relevant)"]},"candlestick_behavior":{"items":["Pin Bar","Engulfing","Inside Bar","Explanation of buyer/seller intent"]},"entry_scenarios":{"requirements":["Clear entry zone","Logical structure-based Stop Loss","TP1 and TP2 targets","Minimum Risk:Reward of 1:2"]},"bias_and_scenarios":{"items":["Main bias (Bullish / Bearish / Neutral)","Alternative scenario upon invalidation"]},"execution_plan":{"items":["Continuation or Reversal trade","Required confirmation before entry"]}},"instructions":["Explain everything step-by-step","Use structure-based logic","Avoid overtrading","Execution-focused explanations"]}`,
+  "ICT": `{"role":"system","identity":{"title":"ICT & Smart Money Analyst","language":"persian","methodology":["ICT (Inner Circle Trader)","Smart Money Concepts"],"restrictions":["No indicators","No retail concepts","ICT & Smart Money concepts ONLY"]},"task":{"description":"Analyze the requested market (Symbol, Timeframe) using ICT & Smart Money Concepts ONLY."},"analysis_requirements":{"1_higher_timeframe_bias":{"timeframes":["Daily","H4"],"elements":["Overall HTF bias (Bullish / Bearish / Neutral)","Premium zone","Discount zone","Equilibrium level (50%)","Imbalance vs Balance state"]},"2_liquidity_mapping":{"identify":["Equal Highs (EQH)","Equal Lows (EQL)","Buy-side liquidity","Sell-side liquidity","Stop-loss pools"],"objective":"Determine where liquidity is resting and likely to be engineered toward"},"3_market_structure":{"elements":["BOS (Break of Structure)","MSS / CHoCH (Market Structure Shift)"],"clarification":["Manipulation phase","Expansion phase"]},"4_pd_arrays":{"arrays":["Bullish Order Blocks","Bearish Order Blocks","Fair Value Gaps (FVG)","Liquidity Voids","Previous Day High (PDH)","Previous Day Low (PDL)","Previous Week High (PWH)","Previous Week Low (PWL)"]},"5_kill_zones":{"condition":"Intraday only","zones":["London Kill Zone","New York Kill Zone"],"explanation":"Explain why timing matters for this setup"},"6_entry_model":{"model_examples":["Liquidity Sweep → MSS → FVG Entry","Liquidity Sweep → Order Block Entry"],"must_include":["Entry price","Stop Loss location (above/below OB or swing)","Take Profit targets based on liquidity"]},"7_narrative":{"storytelling":["Who is trapped?","Where did smart money enter?","Where is price likely engineered to go?"]}},"execution_plan":{"bias":"Bullish or Bearish","entry_conditions":"Clear confirmation rules","targets":"Liquidity-based targets","invalidation_point":"Price level that invalidates the idea"},"output_style":{"tone":"Professional, precise, educational","structure":"Step-by-step, clearly labeled sections","language":"Clear and technical ICT terminology"}}`,
+  "ATR": `{"role":"persian quantitative_trading_assistant","strategy":"ATR-based volatility trading","analysis_requirements":{"volatility_state":["Current ATR value","Comparison with historical ATR average","Volatility expansion or contraction"],"market_condition":["Trending or Ranging","Breakout vs Mean Reversion suitability"],"trade_setup":{"entry":"Based on price structure","stop_loss":"SL = Entry ± (ATR × Multiplier)","take_profit":["TP1 based on ATR expansion","TP2 based on ATR expansion"]},"position_sizing":["Risk per trade (%)","Position size based on SL distance"],"trade_filtering":["When NOT to trade based on ATR","High-risk volatility conditions (news, spikes)"],"risk_management":["Max daily loss","Max consecutive losses","ATR-based trailing stop logic"],"summary":["Statistical justification","Expected trade duration","Risk classification (Low/Medium/High)"]}}`,
+  "پرایس اکشن": `{"role":"system","description":"Professional Price Action Market Analysis Prompt","constraints":{"analysis_style":"Pure Price Action Only","indicators":"Forbidden unless explicitly requested","focus":"High-probability setups only","language":"Professional, clear, step-by-step and persian"},"required_sections":{"market_structure":{"items":["Trend identification (Uptrend / Downtrend / Range)","HH, HL, LH, LL labeling","Structure status (Intact / BOS / MSS)"]},"key_levels":{"items":["Strong Support zones","Strong Resistance zones","Flip zones (SR to Resistance / Resistance to Support)","Psychological levels (if relevant)"]},"candlestick_behavior":{"items":["Pin Bar","Engulfing","Inside Bar","Explanation of buyer/seller intent"]},"entry_scenarios":{"requirements":["Clear entry zone","Logical structure-based Stop Loss","TP1 and TP2 targets","Minimum Risk:Reward of 1:2"]},"bias_and_scenarios":{"items":["Main bias (Bullish / Bearish / Neutral)","Alternative scenario upon invalidation"]},"execution_plan":{"items":["Continuation or Reversal trade","Required confirmation before entry"]}},"instructions":["Explain everything step-by-step","Use structure-based logic","Avoid overtrading","Execution-focused explanations"]}`,
 };
 const DEFAULT_CUSTOM_PROMPTS = [
   { id: "ict_style", title: "ICT & Smart Money", text: STYLE_PROMPTS_DEFAULT["ICT"] },
@@ -1410,6 +1491,19 @@ async function getFreeDailyLimit(env) {
 async function setFreeDailyLimit(env, limit) {
   if (!env.BOT_KV) return;
   await env.BOT_KV.put("settings:free_daily_limit", String(limit));
+}
+
+
+async function getBasePoints(env) {
+  // Admin-configured base points (applied to new users and one-time backfill for zeroed users)
+  const fallback = 50;
+  if (!env.BOT_KV) return fallback;
+  const raw = await env.BOT_KV.get("settings:base_points");
+  return toInt(raw, fallback);
+}
+async function setBasePoints(env, points) {
+  if (!env.BOT_KV) return;
+  await env.BOT_KV.put("settings:base_points", String(points));
 }
 const ALLOWED_STYLE_LIST = ["پرایس اکشن", "ICT", "ATR"];
 const DEFAULT_STYLE_LIST = ALLOWED_STYLE_LIST.slice();
@@ -1766,11 +1860,8 @@ function kb(rows) {
 function mainMenuKeyboard(env) {
   return kb([
     [BTN.SIGNAL, BTN.SETTINGS],
-    [BTN.QUOTE, BTN.NEWS],
-    [BTN.NEWS_ANALYSIS, BTN.MINIAPP],
     [BTN.WALLET, BTN.PROFILE],
     [BTN.INVITE, BTN.SUPPORT],
-    [BTN.EDUCATION, BTN.LEVELING],
     [BTN.HOME],
   ]);
 }
@@ -1925,7 +2016,7 @@ function defaultUser(userId) {
     style: "پرایس اکشن",
     risk: "متوسط",
     newsEnabled: true,
-    promptMode: "style_plus_custom",
+    promptMode: "style_only",
 
     // usage quota
     dailyDate: kyivDateString(),
@@ -1960,6 +2051,11 @@ function defaultUser(userId) {
     },
 
     // referral / points / subscription
+    points: {
+      balance: 0,
+      spent: 0,
+      earnedFromInvites: 0,
+    },
     referral: {
       codes: [],            // 1 code
       referredBy: "",       // inviter userId
@@ -2005,6 +2101,7 @@ function patchUser(st, userId) {
   const d = defaultUser(userId);
   const merged = { ...d, ...st };
   merged.profile = { ...d.profile, ...(st?.profile || {}) };
+  merged.points = { ...d.points, ...(st?.points || {}) };
   merged.referral = { ...d.referral, ...(st?.referral || {}) };
   merged.subscription = { ...d.subscription, ...(st?.subscription || {}) };
   merged.wallet = { ...d.wallet, ...(st?.wallet || {}) };
@@ -2039,6 +2136,26 @@ async function ensureUser(userId, env, from) {
   const kvExisting = dbExisting ? null : await getUser(userId, env);
   const existing = dbExisting || kvExisting;
   let st = patchUser(existing || {}, userId);
+  // Initialize points for new users based on admin-configured base points
+  const basePts = await getBasePoints(env);
+  ensurePoints(st);
+
+  if (!existing) {
+    // brand-new user
+    st.points.balance = Number(basePts);
+    st.points.initialized = true;
+  } else {
+    // Backfill: if user has never received any points and balance is zero, treat as uninitialized and apply base once.
+    const spent = Number(st.points.spent || 0);
+    const earned = Number(st.points.earnedFromInvites || 0);
+    const bal = Number(st.points.balance || 0);
+
+    if (!st.points.initialized && bal === 0 && spent === 0 && earned === 0) {
+      st.points.balance = Number(basePts);
+      st.points.initialized = true;
+    }
+  }
+
 
   // one-way migrate KV -> D1 when BOT_DB is enabled
   if (env.BOT_DB && !dbExisting && kvExisting) {
@@ -2297,7 +2414,7 @@ function extractImageFileId(msg, env) {
 
 function resolveTextProviderChain(env, orderOverride, prompt = "") {
   const raw = orderOverride || env.TEXT_PROVIDER_ORDER;
-  const base = [...new Set(parseOrder(raw, ["cf","openai","openrouter","deepseek","gemini"]))];
+  const base = [...new Set(parseOrder(raw, ["openai","openrouter","deepseek","gemini","cf"]))];
   if (base.length <= 1) return base;
   const minuteBucket = Math.floor(Date.now() / 60000);
   const promptSeed = String(prompt || "").slice(0, 64);
@@ -2356,7 +2473,7 @@ async function runPolishProviders(draft, env, orderOverride) {
   const chain = parseOrder(raw, ["openai","cf","gemini"]);
   const polishPrompt =
     `تو یک ویراستار سخت‌گیر فارسی هستی. متن زیر را فقط “سفت‌وسخت” کن:\n` +
-    `- فقط فارسی\n- قالب شماره‌دار ۱ تا ۵ حفظ شود\n- لحن افشاگر/تیز\n- اضافه‌گویی حذف\n- خیال‌بافی نکن\n\n` +
+    `- فقط فارسی\n- قالب شماره‌دار ۱ تا ۵ حفظ شود\n- لحن افشاگر/تیز\n- خیال‌بافی نکن\n\n` +
     `متن:\n${draft}`;
 
   for (const p of chain) {
@@ -2422,22 +2539,41 @@ async function textProvider(name, prompt, env) {
   }
 
   if (name === "openai") {
-    const apiKey = providerApiKey("openai", env, prompt);
-    if (!apiKey) throw new Error("OPENAI_API_KEY_missing");
-    const r = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: env.OPENAI_MODEL || "gpt-4o-mini",
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.25,
-      }),
-    }, TIMEOUT_TEXT_MS);
-    const j = await r.json().catch(() => null);
-    return j?.choices?.[0]?.message?.content || "";
+    const pool = parseApiKeyPool(env.OPENAI_API_KEY, env.OPENAI_API_KEYS);
+    if (!pool.length) throw new Error("OPENAI_API_KEY_missing");
+
+    // ✅ Rolling keys: اگر 429/401 خورد، با کلید بعدی امتحان کن
+    const minuteBucket = Math.floor(Date.now() / 60000);
+    const seed = `openai|${String(prompt || "").slice(0, 64)}|${minuteBucket}`;
+    const keys = rotateBySeed(pool, seed);
+
+    let lastStatus = 0;
+    let lastBody = null;
+    for (const apiKey of keys) {
+      const r = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: env.OPENAI_MODEL || "gpt-5",
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.25,
+        }),
+      }, TIMEOUT_TEXT_MS);
+
+      lastStatus = r.status;
+      const j = await r.json().catch(() => null);
+      lastBody = j;
+      const out = j?.choices?.[0]?.message?.content || "";
+      if (out && String(out).trim()) return out;
+
+      // only retry on rate/auth transient issues
+      if (![401, 429, 500, 502, 503, 504].includes(r.status)) break;
+    }
+    // include minimal error context
+    throw new Error(`openai_failed_status_${lastStatus}` + (lastBody?.error?.message ? `:${lastBody.error.message}` : ""));
   }
 
   if (name === "openrouter") {
@@ -3322,6 +3458,22 @@ async function buildTextPromptForSymbol(symbol, userPrompt, st, marketBlock, env
     ? "disabled"
     : (st.profile?.capital ? (st.profile.capital + " " + (st.profile.capitalCurrency || "USDT")) : (st.capital?.amount || "unknown"));
 
+  // ✅ Style-only mode: فقط پرامپت سبک اجرا شود (بدون پرامپت پیش‌فرض/دیفالت)
+  if (String(st.promptMode || "").trim() === "style_only") {
+    const extraUser = (userPrompt && String(userPrompt).trim()) ? String(userPrompt).trim() : "";
+    return (
+      `STYLE_PROMPT_JSON:\n${sp}\n\n` +
+      `CONTEXT:\nSymbol=${symbol}\nTimeframe=${tf}\nRisk=${st.risk || "متوسط"}\nCapital=${capital}\n\n` +
+      `MARKET_DATA:\n${marketBlock}\n\n` +
+      (newsBlock ? `NEWS_HEADLINES_FA:\n${newsBlock}\n\n` : ``) +
+      (newsAnalysisBlock ? `NEWS_ANALYSIS_FA:\n${newsAnalysisBlock}\n\n` : ``) +
+      `RULES:\n- فقط فارسی\n- فقط سبک انتخابی (${st.style || "پرایس اکشن"})\n- اندیکاتور اضافه ممنوع\n- خیال‌بافی ممنوع؛ فقط بر اساس OHLC\n- مدیریت ریسک براساس Risk و Capital\n\n` +
+      `QCJSON_SCHEMA:\nQCJSON_SCHEMA:\nدر انتهای خروجی، یک بلاک دقیقاً با این تگ‌ها اضافه کن و هیچ متن دیگری داخل آن نگذار:\n<QCJSON>{"zones":[{"low":0,"high":0,"label":"Demand/Supply","kind":"demand|supply"}],"supports":[0],"resistances":[0],"tp":[0],"sl":0}</QCJSON>\nقوانین QCJSON:\n- فقط JSON معتبر (double quotes)\n- اعداد قیمت فقط عددی (نه متن)\n- zones: آرایه زون‌های افقی (low/high)\n- supports/resistances: خطوط S/R\n- tp: آرایه تارگت‌ها (TP1..)\n- sl: یک عدد استاپ لاس\n- اگر داده کافی نبود، آرایه‌ها را خالی بگذار و sl را 0 بگذار\n\n` +
+      (extraUser ? `USER_REQUEST:\n${extraUser}\n` : ``)
+    );
+  }
+
+
   const userExtra = (isStaff({ username: st.profile?.username }, env) && userPrompt?.trim())
     ? userPrompt.trim()
     : "تحلیل را دقیق، مشروط و اجرایی بنویس.";
@@ -3383,7 +3535,18 @@ async function buildVisionPrompt(st, env) {
   const capital = st.capital?.enabled === false
     ? "disabled"
     : (st.profile?.capital ? (st.profile.capital + " " + (st.profile.capitalCurrency || "USDT")) : (st.capital?.amount || "unknown"));
-  return (
+  
+
+  // ✅ Style-only mode: فقط پرامپت سبک اجرا شود (بدون پرامپت پیش‌فرض/دیفالت)
+  if (String(st.promptMode || "").trim() === "style_only") {
+    return (
+      `STYLE_PROMPT_JSON:\n${sp}\n\n` +
+      `CONTEXT:\nSymbol=CHART\nTimeframe=${tf}\nRisk=${st.risk || "متوسط"}\nCapital=${capital}\n\n` +
+      `TASK: این تصویر چارت را فقط با سبک انتخابی تحلیل کن و خروجی را کاملاً فارسی بده.\n` +
+      `RULES: فقط فارسی، فقط سبک انتخابی، بدون اندیکاتور اضافی و بدون خیال‌بافی.`
+    );
+  }
+return (
     `${base}
 
 ` +
@@ -3622,7 +3785,7 @@ async function handleUpdate(update, env) {
       const txHistory = txs.length
         ? txs.map((t, i) => `${i + 1}) ${t.txHash || "-"} | ${t.amount || "-"} USDT | ${String(t.createdAt || "").slice(0, 16).replace("T", " ")}`).join(String.fromCharCode(10))
         : "—";
-      const planName = `${st.profile?.username || "marketi1"}  PRO`;
+      const planName = `${st.profile?.username || "marketiq"}  PRO`;
       const txt =
         `💳 ولت
 
@@ -3639,8 +3802,8 @@ ${txHistory}
 ${wallet}
 
 ` : "") +
-        `«واریزی فقط به آدرس ولت درگاه ممکن است
-در لیست زیر باید از واریز هش واریزی را ارسال کنید.»`;
+        `«واریزی فقط به آدرس  این ولت  ممکن است
+در  زیر باید بعد از واریز هش واریزی را ارسال کنید.»`;
       return tgSendMessage(env, chatId, txt, walletMenuKeyboard());
     }
 
@@ -3666,9 +3829,9 @@ Memo/Tag: ${memo}
 
 ` +
         `«واریزی فقط به آدرس ولت درگاه ممکن است
-در لیست زیر باید از واریز هش واریزی را ارسال کنید.»
+در  زیر باید از واریز هش واریزی را ارسال کنید.»
 
-TxID پرداخت را همینجا بفرست (در صورت نیاز: <txid> <amount>).`;
+hash پرداخت را همینجا بفرست (در صورت نیاز: <hash> <amount>).`;
       return tgSendMessage(env, chatId, txt, kb([[BTN.BACK, BTN.HOME]]));
     }
 
@@ -3728,7 +3891,7 @@ TxID پرداخت را همینجا بفرست (در صورت نیاز: <txid> <
 
 برای سوالات آماده یا ارسال تیکت از دکمه‌ها استفاده کن.
 
-پیام مستقیم: ${handle}${walletLine}`,
+پیام مستقیم: ${handle}}`,
         kb([[BTN.SUPPORT_FAQ, BTN.SUPPORT_TICKET], [BTN.SUPPORT_CUSTOM_PROMPT], [BTN.HOME]])
       );
     }
@@ -3794,7 +3957,7 @@ ${summary || "تحلیل خبری در دسترس نیست."}`, mainMenuKeyboard
 
 از دکمه زیر وارد شوید. اگر دکمه باز نشد، این لینک را مستقیم باز کنید:
 ${finalUrl}\n\nچک‌لیست سریع اتصال:
-${MINIAPP_EXEC_CHECKLIST}`, kbInline);
+${MINIAPP_EXEC_CHECKLIST_TEXT}`, kbInline);
     }
 
 
@@ -4155,7 +4318,7 @@ ${textClean}`);
       const txid = String(parts[0] || "").trim();
       const amount = Number(parts[1] || 0);
       if (!txid || txid.length < 8) {
-        return tgSendMessage(env, chatId, "TxID نامعتبر است. دوباره ارسال کن.", kb([[BTN.BACK, BTN.HOME]]));
+        return tgSendMessage(env, chatId, "hash نامعتبر است. دوباره ارسال کن.", kb([[BTN.BACK, BTN.HOME]]));
       }
       const payment = { id: `dep_${Date.now()}_${st.userId}`, userId: String(st.userId), username: st.profile?.username || "", amount: Number.isFinite(amount) ? amount : 0, txHash: txid, status: "pending", createdAt: new Date().toISOString(), source: "bot_txid" };
       await storePayment(env, payment);
@@ -4234,8 +4397,7 @@ async function onStart(env, chatId, from, st, refArg) {
 
   await tgSendMessage(env, chatId, await getBotWelcomeText(env), mainMenuKeyboard(env));
 
-  const mkb = await miniappInlineKeyboard(env, st, from);
-  if (mkb) await tgSendMessage(env, chatId, "🧩 ورود سریع به مینی‌اپ:", mkb);
+  
 
   if (!st.profile?.name || !st.profile?.phone) {
     await startOnboarding(env, chatId, from, st);
@@ -4364,10 +4526,8 @@ async function sendSettingsSummary(env, chatId, st, from) {
     `🧩 پرامپت اختصاصی: ${st.customPromptId || "پیش‌فرض"}\n` +
     `⚠️ ریسک: ${st.risk}\n` +
     `📰 خبر: ${st.newsEnabled ? "روشن ✅" : "خاموش ❌"}\n\n` +
-    `سهمیه امروز: ${quota}\n` +
-    (wallet ? `\n💳 آدرس ولت:\n${wallet}\n` : "") +
-    (isStaff(from, env) ? `\n(ادمین/اونر) برای تغییر پرامپت: /setprompt ...\n` : "");
-  return tgSendMessage(env, chatId, txt, settingsMenuKeyboard());
+    `سهمیه امروز: ${quota}\n` 
+     return tgSendMessage(env, chatId, txt, settingsMenuKeyboard());
 }
 
 function profileText(st, from, env) {
@@ -4388,7 +4548,7 @@ function inviteShareText(st, env) {
   const botUser = env.BOT_USERNAME ? String(env.BOT_USERNAME).replace(/^@/, "") : "";
   const code = (st.referral?.codes || [])[0] || "";
   const link = code ? (botUser ? `https://t.me/${botUser}?start=ref_${code}` : `ref_${code}`) : "";
-  const share = link ? `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent("با لینک من عضو شو و اشتراک هدیه بگیر ✅")}` : "";
+  const share = link ? `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent("  لینک من عضو شو و اشتراک هدیه بگیر ✅")}` : "";
   return { link, share };
 }
 
@@ -4398,38 +4558,70 @@ function inviteShareText(st, env) {
 QuickChart renders Chart.js configs as images via https://quickchart.io/chart .
 Financial (candlestick/OHLC) charts are supported via chartjs-chart-financial plugin.
 */
-function buildQuickChartSpec(candles, symbol, tf, levels = []) {
-  const items = (candles || []).slice(-60).map((c) => ({
-    x: new Date(c.t || c.time || c.ts || c.timestamp || Date.now()).toISOString(),
-    o: Number(c.o),
-    h: Number(c.h),
-    l: Number(c.l),
-    c: Number(c.c),
-  }));
-  const annotations = (levels || []).slice(0, 6).map((lvl, idx) => ({
-    type: "line",
-    scaleID: "y",
-    value: Number(lvl),
-    borderColor: idx === 0 ? "#00d1ff" : idx === 1 ? "#ff6b6b" : "#f7c948",
-    borderWidth: 1.5,
-    borderDash: [6, 4],
-    label: { enabled: true, content: `L${idx + 1}: ${Number(lvl).toFixed(4)}` },
-  }));
-  return {
-    type: "candlestick",
-    data: { datasets: [{ label: `${symbol} ${tf}`, data: items }] },
-    options: {
-      plugins: {
-        legend: { display: false },
-        title: { display: true, text: `${symbol} · ${tf}` },
-        annotation: { annotations },
-      },
-      scales: { x: { ticks: { maxRotation: 0, autoSkip: true } } },
-    },
+
+function buildQcAnnotations(items, levels = [], qcSpec = null) {
+  const ann = [];
+
+  const addLine = (value, label, color, dash = [6, 4], width = 1.6) => {
+    const v = Number(value);
+    if (!Number.isFinite(v) || v <= 0) return;
+    ann.push({
+      type: "line",
+      scaleID: "y",
+      value: v,
+      borderColor: color,
+      borderWidth: width,
+      borderDash: dash,
+      label: { enabled: true, content: label },
+    });
   };
+
+  const minX = items?.length ? items[0].x : undefined;
+  const maxX = items?.length ? items[items.length - 1].x : undefined;
+
+  const addZone = (low, high, label, kind) => {
+    const yMin = Number(low);
+    const yMax = Number(high);
+    if (!Number.isFinite(yMin) || !Number.isFinite(yMax) || yMin <= 0 || yMax <= 0) return;
+    const lo = Math.min(yMin, yMax);
+    const hi = Math.max(yMin, yMax);
+    ann.push({
+      type: "box",
+      xMin: minX,
+      xMax: maxX,
+      yMin: lo,
+      yMax: hi,
+      backgroundColor: kind === "supply" ? "rgba(255,77,77,0.10)" : "rgba(47,227,165,0.10)",
+      borderColor: kind === "supply" ? "rgba(255,77,77,0.35)" : "rgba(47,227,165,0.35)",
+      borderWidth: 1,
+      label: { enabled: !!label, content: label || "" },
+    });
+  };
+
+  // fallback "levels" -> treat as generic zones/lines
+  (Array.isArray(levels) ? levels : []).slice(0, 8).forEach((lvl, idx) => {
+    addLine(lvl, `L${idx + 1}`, idx % 2 === 0 ? "#00d1ff" : "#ff8a65");
+  });
+
+  if (qcSpec && typeof qcSpec === "object") {
+    const supports = Array.isArray(qcSpec.supports) ? qcSpec.supports : [];
+    const resistances = Array.isArray(qcSpec.resistances) ? qcSpec.resistances : [];
+    const tp = Array.isArray(qcSpec.tp) ? qcSpec.tp : [];
+    const sl = Number(qcSpec.sl || 0);
+    const zones = Array.isArray(qcSpec.zones) ? qcSpec.zones : [];
+
+    supports.slice(0, 6).forEach((v, i) => addLine(v, `S${i + 1}`, "#00d1ff"));
+    resistances.slice(0, 6).forEach((v, i) => addLine(v, `R${i + 1}`, "#ff8a65"));
+    tp.slice(0, 4).forEach((v, i) => addLine(v, `TP${i + 1}`, "#f7c948", [2, 0], 2));
+    if (Number.isFinite(sl) && sl > 0) addLine(sl, "SL", "#FF4D4D", [2, 0], 2);
+
+    zones.slice(0, 6).forEach((z, i) => addZone(z.low, z.high, z.label || `Z${i + 1}`, (z.kind || "").includes("supply") ? "supply" : "demand"));
+  }
+
+  return ann;
 }
 
-function buildQuickChartCandlestickUrl(candles, symbol, tf, levels = []) {
+function buildQuickChartSpec(candles, symbol, tf, levels = [], qcSpec = null) {
   const items = (candles || []).slice(-80).map((c) => ({
     x: Number(c.t || c.time || c.ts || c.timestamp || Date.now()),
     o: Number(c.o),
@@ -4438,17 +4630,9 @@ function buildQuickChartCandlestickUrl(candles, symbol, tf, levels = []) {
     c: Number(c.c),
   })).filter((x) => Number.isFinite(x.x) && Number.isFinite(x.o) && Number.isFinite(x.h) && Number.isFinite(x.l) && Number.isFinite(x.c));
 
-  const zoneLines = (levels || []).slice(0, 8).map((lvl, idx) => ({
-    type: "line",
-    scaleID: "y",
-    value: Number(lvl),
-    borderColor: idx % 2 === 0 ? "#00d1ff" : "#ff8a65",
-    borderWidth: 1.5,
-    borderDash: [6, 4],
-    label: { enabled: true, content: `Z${idx + 1}` },
-  })).filter((x) => Number.isFinite(x.value));
+  const annotations = buildQcAnnotations(items, levels, qcSpec);
 
-  const cfg = {
+  return {
     type: "candlestick",
     data: {
       datasets: [
@@ -4463,17 +4647,20 @@ function buildQuickChartCandlestickUrl(candles, symbol, tf, levels = []) {
       parsing: false,
       plugins: {
         legend: { display: false },
-        annotation: { annotations: zoneLines },
+        title: { display: true, text: `${symbol} · ${tf}` },
+        annotation: { annotations },
       },
-      scales: {
-        x: { ticks: { maxRotation: 0, autoSkip: true } },
-      },
+      scales: { x: { ticks: { maxRotation: 0, autoSkip: true } } },
     },
   };
+}
 
+function buildQuickChartCandlestickUrl(candles, symbol, tf, levels = [], qcSpec = null) {
+  const cfg = buildQuickChartSpec(candles, symbol, tf, levels, qcSpec);
   const encoded = encodeURIComponent(JSON.stringify(cfg));
   return `https://quickchart.io/chart?version=4&format=png&w=900&h=450&devicePixelRatio=2&plugins=chartjs-chart-financial,chartjs-plugin-annotation&c=${encoded}`;
 }
+
 
 function buildQuickChartLevelsOnlyUrl(symbol, tf, levels = []) {
   const lv = levels.map(Number).filter(Number.isFinite).slice(0, 12);
@@ -4784,8 +4971,8 @@ async function handleVisionFlow(env, chatId, from, userId, st, fileId) {
 /* ========================== ZONES RENDER (SVG) ========================== */
 
 
-async function renderQuickChartPng(env, candles, symbol, tf, levels = []) {
-  const chartUrl = buildQuickChartCandlestickUrl(candles, symbol, tf, levels);
+async function renderQuickChartPng(env, candles, symbol, tf, levels = [], qcSpec = null) {
+  const chartUrl = buildQuickChartCandlestickUrl(candles, symbol, tf, levels, qcSpec);
   const r = await fetch(chartUrl, { cf: { cacheTtl: 60, cacheEverything: true } });
   if (!r.ok) throw new Error(`quickchart_fetch_failed_${r.status}`);
   return await r.arrayBuffer();
@@ -4857,6 +5044,53 @@ function extractLevels(text) {
   }
   return dedup.slice(0, 8);
 }
+
+function extractQcJsonAndStrip(text) {
+  const src = String(text || "");
+  const re = /<QCJSON>\s*([\s\S]*?)\s*<\/QCJSON>/i;
+  const m = src.match(re);
+  if (!m) return { cleaned: src.trim(), qc: null };
+
+  const raw = String(m[1] || "").trim();
+  let qc = null;
+  try {
+    qc = JSON.parse(raw);
+  } catch {
+    qc = null;
+  }
+
+  const cleaned = src.replace(re, "").replace(/\n{3,}/g, "\n\n").trim();
+  return { cleaned, qc };
+}
+
+function normalizeQcSpec(qc, levelsFallback = []) {
+  const out = { zones: [], supports: [], resistances: [], tp: [], sl: 0 };
+  if (!qc || typeof qc !== "object") {
+    return { ...out, supports: levelsFallback, resistances: [], tp: [], sl: 0 };
+  }
+  const numArr = (a) => (Array.isArray(a) ? a.map(Number).filter((n) => Number.isFinite(n) && n > 0) : []);
+  out.supports = numArr(qc.supports || qc.support || qc.s);
+  out.resistances = numArr(qc.resistances || qc.resistance || qc.r);
+  out.tp = numArr(qc.tp || qc.targets || qc.takeProfit);
+  out.sl = Number(qc.sl || qc.stopLoss || 0);
+  if (!Number.isFinite(out.sl)) out.sl = 0;
+
+  const zones = Array.isArray(qc.zones) ? qc.zones : [];
+  out.zones = zones.map((z) => ({
+    low: Number(z?.low),
+    high: Number(z?.high),
+    label: String(z?.label || "").slice(0, 24),
+    kind: String(z?.kind || z?.type || "").toLowerCase(),
+  })).filter((z) => Number.isFinite(z.low) && Number.isFinite(z.high) && z.low > 0 && z.high > 0 && z.high !== z.low)
+    .map((z) => ({ ...z, low: Math.min(z.low, z.high), high: Math.max(z.low, z.high) }))
+    .slice(0, 6);
+
+  // fallback: if no supports/resistances provided, use extracted levels
+  const fallback = numArr(levelsFallback);
+  if (!out.supports.length && !out.resistances.length) out.supports = fallback.slice(0, 6);
+  return out;
+}
+
 
 function extractLevelsFromCandles(candles) {
   if (!Array.isArray(candles) || !candles.length) return [];
@@ -4953,13 +5187,24 @@ function escapeHtml(s) {
 
 /* ========================== MINI APP INLINE ASSETS ========================== */
 function htmlResponse(html, status = 200) {
-  return new Response(html, { status, headers: { "content-type": "text/html; charset=utf-8" } });
+  return new Response(html, { status, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store, max-age=0" } });
 }
 function jsResponse(js, status = 200) {
-  return new Response(js, { status, headers: { "content-type": "application/javascript; charset=utf-8" } });
+  return new Response(js, { status, headers: { "content-type": "application/javascript; charset=utf-8", "cache-control": "no-store, max-age=0" } });
 }
 function jsonResponse(obj, status = 200) {
   return new Response(JSON.stringify(obj), { status, headers: { "content-type": "application/json; charset=utf-8" } });
+}
+
+function pathEndsWith(pathname, suffix) {
+  const p = String(pathname || "");
+  const s = String(suffix || "");
+  return p === s || p.endsWith(s);
+}
+function pathIncludes(pathname, needle) {
+  const p = String(pathname || "");
+  const n = String(needle || "");
+  return !!n && p.includes(n);
 }
 
 
@@ -5016,15 +5261,34 @@ async function verifyMiniappToken(token, env) {
 }
 
 async function verifyMiniappAuth(body, env) {
+  // 1) Web access tokens (برای باز شدن پنل ادمین/اونر در مرورگر)
+  const webToken = String(body?.webToken || "").trim();
+  if (webToken) {
+    const ownerTok = String(env.WEB_OWNER_TOKEN || "").trim();
+    const adminTok = String(env.WEB_ADMIN_TOKEN || "").trim();
+    if (ownerTok && timingSafeEqual(webToken, ownerTok)) {
+      const username = firstHandleFromCsv(env.OWNER_HANDLES) || "owner";
+      return { ok: true, userId: 999000001, fromLike: { username } };
+    }
+    if (adminTok && timingSafeEqual(webToken, adminTok)) {
+      const username = firstHandleFromCsv(env.ADMIN_HANDLES) || firstHandleFromCsv(env.OWNER_HANDLES) || "admin";
+      return { ok: true, userId: 999000002, fromLike: { username } };
+    }
+  }
+
+  // 2) Standard Telegram MiniApp auth (initData)
   const initData = body?.initData;
   const v = await verifyTelegramInitData(initData, env.TELEGRAM_BOT_TOKEN, env.INITDATA_MAX_AGE_SEC, env.MINIAPP_AUTH_LENIENT);
   if (v.ok) return v;
+
+  // 3) MiniToken fallback (issued by bot)
   const token = String(body?.miniToken || "").trim();
   if (!token) return v;
   const tv = await verifyMiniappToken(token, env);
   if (tv.ok) return tv;
   return v;
 }
+
 
 /* ========================== TELEGRAM MINI APP initData verification ========================== */
 async function verifyTelegramInitData(initData, botToken, maxAgeSecRaw, lenientRaw) {
@@ -5080,6 +5344,15 @@ async function hmacSha256Hex(keyBytes, msgBytes) {
   return toHex(new Uint8Array(sig));
 }
 function toHex(u8) { let out=""; for (const b of u8) out += b.toString(16).padStart(2,"0"); return out; }
+function timingSafeEqual(a, b) {
+  a = String(a || "");
+  b = String(b || "");
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
 function timingSafeEqualHex(a, b) {
   a = String(a || "").toLowerCase();
   b = String(b || "").toLowerCase();
@@ -5349,6 +5622,7 @@ const MINI_APP_HTML = `<!doctype html>
       <button class="tab-btn" data-tab="analysis">تحلیل</button>
       <button class="tab-btn" data-tab="news">اخبار</button>
       <button class="tab-btn" data-tab="admin">پنل مدیریت</button>
+      <button class="tab-btn" data-tab="owner">پنل اونر</button>
     </div>
 
     <div class="grid">
@@ -5573,6 +5847,14 @@ const MINI_APP_HTML = `<!doctype html>
           </div>
 
           <div class="field">
+            <div class="label">امتیاز پایه کاربران</div>
+            <div class="admin-row">
+              <input id="basePoints" class="control" placeholder="مثلاً 100" />
+              <button id="saveBasePoints" class="btn">ذخیره امتیاز پایه</button>
+            </div>
+          </div>
+
+          <div class="field">
             <div class="label">پرامپت‌های اختصاصی (JSON)</div>
             <textarea id="customPromptsJson" class="control" placeholder='[{"id":"p1","title":"VIP","text":"..."}]'></textarea>
             <div class="admin-row">
@@ -5755,10 +6037,12 @@ const MINI_APP_HTML = `<!doctype html>
 </body>
 </html>`;
 
-const MINI_APP_JS = `const tg = window.Telegram?.WebApp;
-if (tg) tg.ready();
-if (tg?.expand) tg.expand();
-
+const MINI_APP_JS = `var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16;
+const tg = (_a = window.Telegram) === null || _a === void 0 ? void 0 : _a.WebApp;
+if (tg)
+    tg.ready();
+if (tg === null || tg === void 0 ? void 0 : tg.expand)
+    tg.expand();
 const out = document.getElementById("out");
 const meta = document.getElementById("meta");
 const sub = document.getElementById("sub");
@@ -5778,17 +6062,14 @@ const energyText = document.getElementById("energyText");
 const energyFill = document.getElementById("energyFill");
 const offerMedia = document.getElementById("offerMedia");
 const offerImg = document.getElementById("offerImg");
-
-function el(id){ return document.getElementById(id); }
-function val(id){ return el(id).value; }
-function setVal(id, v){ el(id).value = v; }
-
+function el(id) { return document.getElementById(id); }
+function val(id) { return el(id).value; }
+function setVal(id, v) { el(id).value = v; }
 const toast = el("toast");
 const toastT = el("toastT");
 const toastS = el("toastS");
 const toastB = el("toastB");
 const spin = el("spin");
-
 let ALL_SYMBOLS = [];
 let INIT_DATA = "";
 let MINI_TOKEN = "";
@@ -5796,17 +6077,31 @@ let IS_STAFF = false;
 let IS_OWNER = false;
 let IS_GUEST = false;
 let OFFLINE_MODE = false;
-
 const LOCAL_KEYS = {
-  initData: "miniapp_init_data",
-  miniToken: "miniapp_auth_token",
-  userState: "miniapp_cached_user_state_v1",
-  quoteCache: "miniapp_quote_cache_v1",
-  newsCache: "miniapp_news_cache_v1",
-  newsAnalysisCache: "miniapp_news_analysis_cache_v1",
-  analyzeCache: "miniapp_analyze_cache_v1",
+    initData: "miniapp_init_data",
+    miniToken: "miniapp_auth_token",
+    userState: "miniapp_cached_user_state_v1",
+    quoteCache: "miniapp_quote_cache_v1",
+    newsCache: "miniapp_news_cache_v1",
+    newsAnalysisCache: "miniapp_news_analysis_cache_v1",
+    analyzeCache: "miniapp_analyze_cache_v1",
 };
-const API_BASE = window.location.origin;
+const ORIGIN = window.location.origin;
+const ROOT_PREFIX = (() => {
+    const p0 = window.location.pathname || "";
+    const p = p0.endsWith("/") ? p0.slice(0, -1) : p0;
+    const marker = "/miniapp";
+    const i = p.indexOf(marker);
+    if (i >= 0)
+        return p.slice(0, i);
+    return "";
+})();
+function apiUrl(path) {
+    let p = String(path || "");
+    if (!p.startsWith("/"))
+        p = "/" + p;
+    return ORIGIN + ROOT_PREFIX + p;
+}
 let ADMIN_TICKETS = [];
 let ADMIN_TICKETS_ALL = [];
 let ADMIN_WITHDRAWALS = [];
@@ -5814,1457 +6109,1580 @@ let ADMIN_PROMPT_REQS = [];
 let QUOTE_TIMER = null;
 let QUOTE_BUSY = false;
 let NEWS_TIMER = null;
-const CONNECTION_HINT = "مینی‌اپ را داخل تلگرام باز کنید. در صورت خطا، یک‌بار ببندید و دوباره اجرا کنید.";
+const CONNECTION_HINT = "\u0645\u06CC\u0646\u06CC\u200C\u0627\u067E \u0631\u0627 \u062F\u0627\u062E\u0644 \u062A\u0644\u06AF\u0631\u0627\u0645 \u0628\u0627\u0632 \u06A9\u0646\u06CC\u062F. \u062F\u0631 \u0635\u0648\u0631\u062A \u062E\u0637\u0627\u060C \u06CC\u06A9\u200C\u0628\u0627\u0631 \u0628\u0628\u0646\u062F\u06CC\u062F \u0648 \u062F\u0648\u0628\u0627\u0631\u0647 \u0627\u062C\u0631\u0627 \u06A9\u0646\u06CC\u062F.";
 const MINIAPP_EXEC_CHECKLIST = [
-  "1) مینی‌اپ را فقط از داخل تلگرام باز کنید.",
-  "2) تاریخ/ساعت گوشی را روی حالت خودکار بگذارید.",
-  "3) VPN/Proxy را یک‌بار خاموش/روشن و دوباره تست کنید.",
-  "4) اپ تلگرام را آپدیت کنید و Mini App cache را پاک کنید.",
-  "5) اگر خطای 401 بود، اپ را کامل ببندید و از دکمه /miniapp دوباره وارد شوید.",
-  "6) اگر هنوز وصل نشد، لاگ /health و پاسخ /api/user را برای پشتیبانی ارسال کنید."
+    "1) \u0645\u06CC\u0646\u06CC\u200C\u0627\u067E \u0631\u0627 \u0641\u0642\u0637 \u0627\u0632 \u062F\u0627\u062E\u0644 \u062A\u0644\u06AF\u0631\u0627\u0645 \u0628\u0627\u0632 \u06A9\u0646\u06CC\u062F.",
+    "2) \u062A\u0627\u0631\u06CC\u062E/\u0633\u0627\u0639\u062A \u06AF\u0648\u0634\u06CC \u0631\u0627 \u0631\u0648\u06CC \u062D\u0627\u0644\u062A \u062E\u0648\u062F\u06A9\u0627\u0631 \u0628\u06AF\u0630\u0627\u0631\u06CC\u062F.",
+    "3) VPN/Proxy \u0631\u0627 \u06CC\u06A9\u200C\u0628\u0627\u0631 \u062E\u0627\u0645\u0648\u0634/\u0631\u0648\u0634\u0646 \u0648 \u062F\u0648\u0628\u0627\u0631\u0647 \u062A\u0633\u062A \u06A9\u0646\u06CC\u062F.",
+    "4) \u0627\u067E \u062A\u0644\u06AF\u0631\u0627\u0645 \u0631\u0627 \u0622\u067E\u062F\u06CC\u062A \u06A9\u0646\u06CC\u062F \u0648 Mini App cache \u0631\u0627 \u067E\u0627\u06A9 \u06A9\u0646\u06CC\u062F.",
+    "5) \u0627\u06AF\u0631 \u062E\u0637\u0627\u06CC 401 \u0628\u0648\u062F\u060C \u0627\u067E \u0631\u0627 \u06A9\u0627\u0645\u0644 \u0628\u0628\u0646\u062F\u06CC\u062F \u0648 \u0627\u0632 \u062F\u06A9\u0645\u0647 /miniapp \u062F\u0648\u0628\u0627\u0631\u0647 \u0648\u0627\u0631\u062F \u0634\u0648\u06CC\u062F.",
+    "6) \u0627\u06AF\u0631 \u0647\u0646\u0648\u0632 \u0648\u0635\u0644 \u0646\u0634\u062F\u060C \u0644\u0627\u06AF /health \u0648 \u067E\u0627\u0633\u062E /api/user \u0631\u0627 \u0628\u0631\u0627\u06CC \u067E\u0634\u062A\u06CC\u0628\u0627\u0646\u06CC \u0627\u0631\u0633\u0627\u0644 \u06A9\u0646\u06CC\u062F."
 ].join("\n");
-
 function getFreshInitData() {
-  const latestTg = (tg?.initData || "").trim();
-  if (latestTg) {
-    INIT_DATA = latestTg;
-    try { localStorage.setItem(LOCAL_KEYS.initData, latestTg); } catch {}
-  }
-  return INIT_DATA || latestTg || "";
+    const latestTg = ((tg === null || tg === void 0 ? void 0 : tg.initData) || "").trim();
+    if (latestTg) {
+        INIT_DATA = latestTg;
+        try {
+            localStorage.setItem(LOCAL_KEYS.initData, latestTg);
+        }
+        catch (_a) { }
+    }
+    return INIT_DATA || latestTg || "";
 }
-
 function buildAuthBody(extra = {}) {
-  return { initData: getFreshInitData(), miniToken: MINI_TOKEN || localStorage.getItem(LOCAL_KEYS.miniToken) || "", ...extra };
+    const webToken = getParamEverywhere("access") || getParamEverywhere("webToken") || "";
+    return Object.assign({ initData: getFreshInitData(), miniToken: MINI_TOKEN || localStorage.getItem(LOCAL_KEYS.miniToken) || "", webToken }, extra);
 }
-
 function parseMiniTokenStartParam(raw) {
-  const v = String(raw || "").trim();
-  if (!v) return "";
-  try {
-    const qp = new URLSearchParams(v);
-    const t = String(qp.get("miniToken") || qp.get("token") || "").trim();
-    if (t) return t;
-  } catch {}
-  const m = v.match(/(?:^|[?&])(?:miniToken|token)=([^&]+)/i);
-  if (m?.[1]) {
-    try { return decodeURIComponent(m[1]).trim(); } catch { return String(m[1] || "").trim(); }
-  }
-  if (/^[a-f0-9]{24,96}$/i.test(v)) return v;
-  return "";
-}
-
-function getParamEverywhere(name) {
-  const n = String(name || "").trim();
-  if (!n) return "";
-  const q = new URLSearchParams(window.location.search).get(n) || "";
-  if (q) return q;
-  const hash = String(window.location.hash || "").replace(/^#/, "");
-  const h = new URLSearchParams(hash).get(n) || "";
-  return h || "";
-}
-
-function showToast(title, subline = "", badge = "", loading = false){
-  if (!toast || !toastT || !toastS || !toastB || !spin) return;
-  toastT.textContent = title || "";
-  toastS.textContent = subline || "";
-  toastB.textContent = badge || "";
-  spin.style.display = loading ? "inline-block" : "none";
-  toast.classList.add("show");
-}
-function hideToast(){ if (toast) toast.classList.remove("show"); }
-
-
-function applyTab(tab){
-  const selected = tab || "dashboard";
-  document.querySelectorAll(".tab-btn").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.tab === selected);
-  });
-  document.querySelectorAll(".tab-section").forEach((sec) => {
-    sec.classList.toggle("active", sec.dataset.tabSection === selected);
-  });
-}
-
-function setupTabs(){
-  const tabs = el("mainTabs");
-  if (!tabs) return;
-  tabs.addEventListener("click", (e) => {
-    const b = e.target?.closest?.(".tab-btn");
-    if (!b) return;
-    applyTab(b.dataset.tab || "dashboard");
-  });
-}
-
-async function fileToDataUrl(file){
-  return await new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result || ""));
-    r.onerror = () => reject(new Error("file_read_failed"));
-    r.readAsDataURL(file);
-  });
-}
-
-function fillSymbols(list){
-  ALL_SYMBOLS = Array.isArray(list) ? list.slice() : [];
-  const sel = el("symbol");
-  const cur = sel.value;
-  sel.innerHTML = "";
-  for (const s of ALL_SYMBOLS) {
-    const opt = document.createElement("option");
-    opt.value = s;
-    opt.textContent = s;
-    sel.appendChild(opt);
-  }
-  if (cur && ALL_SYMBOLS.includes(cur)) sel.value = cur;
-}
-
-function fillStyles(list){
-  const styles = Array.isArray(list) ? list.slice() : [];
-  const sel = el("style");
-  const cur = sel.value;
-  sel.innerHTML = "";
-  for (const s of styles) {
-    const opt = document.createElement("option");
-    opt.value = s;
-    opt.textContent = s;
-    sel.appendChild(opt);
-  }
-  if (cur && styles.includes(cur)) sel.value = cur;
-}
-
-function fillCustomPrompts(list){
-  const prompts = Array.isArray(list) ? list.slice() : [];
-  const sel = el("customPrompt");
-  const cur = sel.value;
-  sel.innerHTML = "";
-  const defaultOpt = document.createElement("option");
-  defaultOpt.value = "";
-  defaultOpt.textContent = "پیش‌فرض";
-  sel.appendChild(defaultOpt);
-  for (const p of prompts) {
-    const opt = document.createElement("option");
-    opt.value = String(p?.id || "");
-    opt.textContent = p?.title ? String(p.title) : String(p?.id || "");
-    sel.appendChild(opt);
-  }
-  if (cur) sel.value = cur;
-}
-
-function filterSymbols(q){
-  q = (q || "").trim().toUpperCase();
-  const sel = el("symbol");
-  const cur = sel.value;
-  sel.innerHTML = "";
-
-  const list = !q ? ALL_SYMBOLS : ALL_SYMBOLS.filter(s => s.includes(q));
-  for (const s of list) {
-    const opt = document.createElement("option");
-    opt.value = s;
-    opt.textContent = s;
-    sel.appendChild(opt);
-  }
-  if (cur && list.includes(cur)) sel.value = cur;
-}
-
-function setTf(tf){
-  setVal("timeframe", tf);
-  const chips = el("tfChips")?.querySelectorAll(".chip") || [];
-  for (const c of chips) c.classList.toggle("on", c.dataset.tf === tf);
-}
-
-async function api(path, body){
-  let lastErr = null;
-  const quickBoot = path === "/api/user" && !!body?.allowGuest;
-  const attempts = quickBoot ? 2 : 2;
-  for (let i = 0; i < attempts; i++) {
+    const v = String(raw || "").trim();
+    if (!v)
+        return "";
     try {
-      const ac = new AbortController();
-      const quickMs = i === 0 ? 4500 : 9000;
-      const tm = setTimeout(() => ac.abort("timeout"), quickBoot ? quickMs : (12000 + (i * 4000)));
-      const r = await fetch(API_BASE + path, {        method: "POST",
-        headers: {"content-type":"application/json"},
-        body: JSON.stringify(body),
-        signal: ac.signal,
-      });
-      clearTimeout(tm);
-      const j = await r.json().catch(() => null);
-      return { status: r.status, json: j };
-    } catch (e) {
-      lastErr = e;
-      await new Promise((res) => setTimeout(res, 350 * (i + 1)));
+        const qp = new URLSearchParams(v);
+        const t = String(qp.get("miniToken") || qp.get("token") || "").trim();
+        if (t)
+            return t;
     }
-  }
-  return { status: 599, json: { ok: false, error: String(lastErr?.message || lastErr || "network_error") } };
-}
-
-async function adminApi(path, body){
-  if (!IS_STAFF) return { status: 403, json: { ok: false, error: "forbidden" } };
-  return api(path, buildAuthBody(body));
-}
-
-function prettyErr(j, status){
-  const e = j?.error || "نامشخص";
-  if (status === 429 && String(e).startsWith("quota_exceeded")) return "سهمیه امروز تمام شد.";
-  if (status === 403 && String(e) === "onboarding_required") return "لطفاً آنبوردینگ را کامل کن: نام، شماره، سرمایه، تعیین‌سطح و سبک.";
-  if (status === 403 && String(e) === "forbidden") return "دسترسی این بخش برای نقش فعلی شما مجاز نیست.";
-  if (status === 401) {
-    if (String(e).includes("initData")) return "اتصال مینی‌اپ منقضی شده؛ اپ را مجدد از داخل تلگرام باز کنید.";
-    return "احراز هویت تلگرام ناموفق است.\n\n" + MINIAPP_EXEC_CHECKLIST;
-  }
-  return "مشکلی پیش آمد. لطفاً دوباره تلاش کنید.";
-}
-
-function fmtPrice(v){
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "—";
-  const digits = n >= 1000 ? 2 : (n >= 1 ? 4 : 6);
-  return n.toLocaleString("en-US", { maximumFractionDigits: digits });
-}
-
-function setQuoteUi(data, errMsg = ""){
-  const qSym = el("quoteSymbol");
-  const qPrice = el("quotePrice");
-  const qChange = el("quoteChange");
-  const qTrend = el("quoteTrend");
-  const qStamp = el("quoteStamp");
-  const qMeta = el("quoteMeta");
-  if (!qSym || !qPrice || !qChange || !qTrend || !qStamp || !qMeta) return;
-
-  if (!data?.ok) {
-    qMeta.textContent = errMsg || "داده قیمت در دسترس نیست.";
-    qStamp.textContent = "—";
-    return;
-  }
-
-  const cp = Number(data.changePct || 0);
-  qSym.textContent = data.symbol || "—";
-  qPrice.textContent = fmtPrice(data.price);
-  qChange.textContent = (cp > 0 ? "+" : "") + cp.toFixed(3) + "%";  qTrend.textContent = data.trend || "نامشخص";
-
-  qChange.classList.remove("q-up","q-down","q-flat");
-  qChange.classList.add(data.status === "up" ? "q-up" : (data.status === "down" ? "q-down" : "q-flat"));
-  const dt = data.lastTs ? new Date(Number(data.lastTs)) : new Date();
-  qStamp.textContent = dt.toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-  qMeta.textContent = "TF: " + (data.timeframe || "-") + " | candles: " + (data.candles || 0) + " | کیفیت: " + (data.quality === "full" ? "کامل" : "محدود");}
-
-async function refreshLiveQuote(force = false){
-  if (QUOTE_BUSY) return;
-  if (!force && document.hidden) return;
-  QUOTE_BUSY = true;
-  try {
-    const symbol = val("symbol") || "";
-    const timeframe = val("timeframe") || "H4";
-    if (!symbol) return;
-    const ck = quoteCacheKey(symbol, timeframe);
-
-    if (OFFLINE_MODE) {
-      const cached = readByKey(LOCAL_KEYS.quoteCache, ck);
-      setQuoteUi(cached, "قیمت لحظه‌ای از کش محلی");
-      return;
+    catch (_a) { }
+    const m = v.match(/(?:^|[?&])(?:miniToken|token)=([^&]+)/i);
+    if (m === null || m === void 0 ? void 0 : m[1]) {
+        try {
+            return decodeURIComponent(m[1]).trim();
+        }
+        catch (_b) {
+            return String(m[1] || "").trim();
+        }
     }
-
-    const { json } = await api("/api/quote", buildAuthBody({ symbol, timeframe, allowGuest: true }));
-    if (json?.ok) {
-      cacheByKey(LOCAL_KEYS.quoteCache, ck, json);
-      setQuoteUi(json, "");
-      return;
-    }
-    const cached = readByKey(LOCAL_KEYS.quoteCache, ck);
-    setQuoteUi(cached || json, cached ? "قیمت از کش نمایش داده شد" : "خطا در دریافت قیمت لحظه‌ای");
-  } finally {
-    QUOTE_BUSY = false;
-  }
+    if (/^[a-f0-9]{24,96}$/i.test(v))
+        return v;
+    return "";
 }
-
-function setupLiveQuotePolling(){
-  if (QUOTE_TIMER) clearInterval(QUOTE_TIMER);
-  refreshLiveQuote(true);
-  QUOTE_TIMER = setInterval(() => { refreshLiveQuote(false); }, 12000);
+function getParamEverywhere(name) {
+    const n = String(name || "").trim();
+    if (!n)
+        return "";
+    const q = new URLSearchParams(window.location.search).get(n) || "";
+    if (q)
+        return q;
+    const hash = String(window.location.hash || "").replace(/^#/, "");
+    const h = new URLSearchParams(hash).get(n) || "";
+    return h || "";
 }
-
-function renderNewsList(json){
-  const target = el("newsList");
-  if (!target) return;
-  if (!json?.ok || !Array.isArray(json.articles) || !json.articles.length) {
-    target.textContent = "فعلاً خبر مرتبطی پیدا نشد.";
-    return;
-  }
-  target.innerHTML = "";
-  for (const a of json.articles.slice(0, 6)) {
-    const row = document.createElement("div");
-    const title = document.createElement("a");
-    title.href = a.url || "#";
-    title.target = "_blank";
-    title.rel = "noopener noreferrer";
-    title.textContent = "• " + String(a.title || "بدون عنوان");
-    title.style.color = "#c7d2fe";
-    title.style.textDecoration = "none";
-    const meta = document.createElement("div");
-    meta.className = "muted";
-    meta.style.fontSize = "11px";
-    meta.textContent = (a.source || "") + (a.publishedAt ? (" | " + a.publishedAt) : "");
-    row.appendChild(title);
-    row.appendChild(meta);
-    row.style.marginBottom = "8px";
-    target.appendChild(row);
-  }
+function showToast(title, subline = "", badge = "", loading = false) {
+    if (!toast || !toastT || !toastS || !toastB || !spin)
+        return;
+    toastT.textContent = title || "";
+    toastS.textContent = subline || "";
+    toastB.textContent = badge || "";
+    spin.style.display = loading ? "inline-block" : "none";
+    toast.classList.add("show");
 }
-
-async function refreshSymbolNews(force = false){
-  if (!force && document.hidden) return;
-  const symbol = val("symbol") || "";
-  if (!symbol) return;
-  const target = el("newsList");
-  if (target && force) target.textContent = "در حال دریافت خبر…";
-  const ck = newsCacheKey(symbol);
-
-  if (OFFLINE_MODE) {
-    const cached = readByKey(LOCAL_KEYS.newsCache, ck);
-    renderNewsList(cached || { ok: false, articles: [] });
-    return;
-  }
-
-  const { json } = await api("/api/news", buildAuthBody({ symbol, allowGuest: true }));
-  if (json?.ok) {
-    cacheByKey(LOCAL_KEYS.newsCache, ck, json);
-    renderNewsList(json);
-    return;
-  }
-  const cached = readByKey(LOCAL_KEYS.newsCache, ck);
-  renderNewsList(cached || json);
-}
-
-async function refreshNewsAnalysis(force = false){
-  if (!force && document.hidden) return;
-  const symbol = val("symbol") || "";
-  if (!symbol) return;
-  const target = el("newsAnalysis");
-  if (target && force) target.textContent = "در حال تحلیل خبر…";
-  const ck = newsCacheKey(symbol);
-
-  if (OFFLINE_MODE) {
-    const cached = readByKey(LOCAL_KEYS.newsAnalysisCache, ck);
-    if (target) target.textContent = cached?.summary || "تحلیل خبری آفلاین موجود نیست.";
-    return;
-  }
-
-  const { json } = await api("/api/news/analyze", buildAuthBody({ symbol, allowGuest: true }));
-  if (!target) return;
-  if (json?.ok) {
-    cacheByKey(LOCAL_KEYS.newsAnalysisCache, ck, json);
-    target.textContent = json.summary || "—";
-    return;
-  }
-  const cached = readByKey(LOCAL_KEYS.newsAnalysisCache, ck);
-  target.textContent = cached?.summary || "تحلیل خبری در دسترس نیست.";
-}
-
-function setupNewsPolling(){
-  if (NEWS_TIMER) clearInterval(NEWS_TIMER);
-  refreshSymbolNews(true);
-  refreshNewsAnalysis(true);
-  NEWS_TIMER = setInterval(() => { refreshSymbolNews(false); refreshNewsAnalysis(false); }, 60000);
-}
-function renderChartFallbackSvg(svgText){
-  const chartCard = el("chartCard");
-  const chartImg = el("chartImg");
-  if (!chartCard || !chartImg || !svgText) return;
-  const svgUrl = "data:image/svg+xml;utf8," + encodeURIComponent(svgText);
-  chartImg.src = svgUrl;
-  chartCard.style.display = "block";
-  const cm = el("chartMeta");
-  if (cm) cm.textContent = "Internal Zones Renderer";
-}
-
-function pickTicketReplyTemplate(){
-  const tpl = el("ticketReplyTemplate")?.value || "";
-  if (!tpl) return;
-  const input = el("ticketReply");
-  if (!input) return;
-  if (!input.value.trim()) input.value = tpl;
-}
-
-function updateMeta(state, quota){
-  const qRaw = String(quota || "-");
-  let energy = "—";
-  let remainTxt = "∞";
-  const m = qRaw.match(/^(\d+)\/(\d+)$/);
-  if (m) {
-    const used = Number(m[1] || 0);
-    const lim = Math.max(1, Number(m[2] || 1));
-    const remain = Math.max(0, lim - used);
-    const pct = Math.max(0, Math.min(100, Math.round((remain / lim) * 100)));
-    energy = pct + "%";
-    remainTxt = String(remain);
-  } else if (qRaw === "∞") {
-    energy = "100%";
-    remainTxt = "∞";
-  }
-  meta.textContent = "انرژی: " + energy + " | تحلیل باقی‌مانده: " + remainTxt + " | سهمیه: " + qRaw;
-  sub.textContent = "ID: " + (state?.userId || "-") + " | امروز(Tehran): " + (state?.dailyDate || "-");
-  const q = String(quota || "");
-  const m2 = q.match(/(\d+)\s*\/\s*(\d+)/);
-  let used = 0;
-  let limit = 0;
-  if (m2) {
-    used = Number(m2[1] || 0);
-    limit = Number(m2[2] || 0);
-  }
-  const remaining = Math.max(0, limit - used);
-  const pct = limit > 0 ? Math.max(0, Math.min(100, Math.round((remaining / limit) * 100))) : 100;
-  if (remainingText) remainingText.textContent = "تحلیل باقی‌مانده: " + (limit > 0 ? String(remaining) : "∞");
-  if (energyText) energyText.textContent = "انرژی: " + (limit > 0 ? (pct + "%") : "نامحدود");
-  if (energyFill) energyFill.style.width = (limit > 0 ? pct : 100) + "%";
-}
-
-function updateDashboardStats(role, quota){
-  const raw = String(quota || "0/0");
-  let used = 0, limit = 0;
-  if (raw.includes("/")) {
-    const [u, l] = raw.split("/");
-    used = Number(u) || 0;
-    limit = Number(l) || 0;
-  }
-  const remain = (Number.isFinite(limit) && limit > 0) ? Math.max(0, limit - used) : (raw === "∞" ? "∞" : 0);
-  if (roleLabel) roleLabel.textContent = role || "user";
-  if (energyToday) energyToday.textContent = raw === "∞" ? "نامحدود" : String(used);
-  if (remainingAnalyses) remainingAnalyses.textContent = String(remain);
-}
-
-function setOfferImage(url){
-  const clean = String(url || "").trim();
-  if (!offerMedia || !offerImg) return;
-  if (!clean) {
-    offerImg.removeAttribute("src");
-    offerMedia.classList.remove("show");
-    return;
-  }
-  offerImg.src = clean;
-  offerMedia.classList.add("show");
-}
-
-function renderStyleList(styles){
-  const target = el("styleList");
-  if (!target) return;
-  target.textContent = Array.isArray(styles) && styles.length ? styles.join(" • ") : "—";
-}
-
-function renderCommissionList(commission){
-  const target = el("commissionList");
-  if (!target) return;
-  const global = commission?.globalPercent ?? 0;
-  const overrides = commission?.overrides || {};
-  const lines = ["کلی: " + global + "%"];
-  for (const [k, v] of Object.entries(overrides)) lines.push(String(k) + ": " + String(v) + "%");
-  target.textContent = lines.join("\\n");
-}
-
-function renderPayments(list){
-  const target = el("paymentList");
-  if (!target) return;
-  if (!Array.isArray(list) || !list.length) { target.textContent = "—"; return; }
-  target.textContent = list.slice(0, 8).map((p) => {
-    const who = p.username || p.userId;
-    return "• " + who + " | " + p.amount + " | " + p.status + " | " + (p.txHash || "—");
-  }).join("\\n");
-}
-
-
-function shortText(s, n = 80){
-  s = String(s || "").replace(/\s+/g, " ").trim();
-  return s.length > n ? (s.slice(0, n) + "…") : s;
-}
-
-function renderTickets(list, keepMaster = false){
-  ADMIN_TICKETS = Array.isArray(list) ? list.slice() : [];
-  if (!keepMaster) ADMIN_TICKETS_ALL = ADMIN_TICKETS.slice();
-  const sel = el("ticketSelect");
-  const target = el("ticketsList");
-  if (sel) sel.innerHTML = "";
-  if (!ADMIN_TICKETS.length){
-    if (sel){
-      const o = document.createElement("option");
-      o.value = "";
-      o.textContent = "—";
-      sel.appendChild(o);
-    }
-    if (target) target.textContent = "—";
-    return;
-  }
-
-  const items = ADMIN_TICKETS.slice().sort((a,b) => String(b?.createdAt||"").localeCompare(String(a?.createdAt||"")));
-  if (sel){
-    for (const t of items){
-      const o = document.createElement("option");
-      o.value = t.id || "";
-      const who = t.username ? ("@"+String(t.username).replace(/^@/,"")) : (t.userId || "-");
-      o.textContent = String(t.id || "-") + " | " + who + " | " + String(t.status || "pending");
-      sel.appendChild(o);
-    }
-  }
-  if (target){
-    target.textContent = items.slice(0, 25).map((t) => {
-      const who = t.username ? ("@"+String(t.username).replace(/^@/,"")) : (t.userId || "-");
-      return "• " + t.id + " | " + who + " | " + (t.status || "pending") + " | " + shortText(t.text, 80);
-    }).join(String.fromCharCode(10));
-  }
-}
-
-function renderWithdrawals(list){
-  ADMIN_WITHDRAWALS = Array.isArray(list) ? list.slice() : [];
-  const sel = el("withdrawSelect");
-  const target = el("withdrawalsList");
-  if (sel) sel.innerHTML = "";
-  if (!ADMIN_WITHDRAWALS.length){
-    if (sel){
-      const o = document.createElement("option");
-      o.value = "";
-      o.textContent = "—";
-      sel.appendChild(o);
-    }
-    if (target) target.textContent = "—";
-    return;
-  }
-  const items = ADMIN_WITHDRAWALS.slice().sort((a,b) => String(b?.createdAt||"").localeCompare(String(a?.createdAt||"")));
-  if (sel){
-    for (const w of items){
-      const o = document.createElement("option");
-      o.value = w.id || "";
-      o.textContent = String(w.id || "-") + " | " + String(w.userId || "-") + " | " + String(w.amount || 0) + " | " + String(w.status || "pending");
-      sel.appendChild(o);
-    }
-  }
-  if (target){
-    target.textContent = items.slice(0, 25).map((w) => {
-      return "• " + w.id + " | " + (w.userId || "-") + " | " + (w.amount || 0) + " | " + (w.status || "pending") + " | " + shortText(w.address, 32);
-    }).join(String.fromCharCode(10));
-  }
-}
-
-function renderPromptReqs(list){
-  ADMIN_PROMPT_REQS = Array.isArray(list) ? list.slice() : [];
-  const sel = el("promptReqSelect");
-  const target = el("promptReqList");
-  if (sel) sel.innerHTML = "";
-  if (!ADMIN_PROMPT_REQS.length){
-    if (sel){
-      const o = document.createElement("option");
-      o.value = "";
-      o.textContent = "—";
-      sel.appendChild(o);
-    }
-    if (target) target.textContent = "—";
-    return;
-  }
-  const items = ADMIN_PROMPT_REQS.slice().sort((a,b) => String(b?.createdAt||"").localeCompare(String(a?.createdAt||"")));
-  if (sel){
-    for (const r of items){
-      const o = document.createElement("option");
-      o.value = r.id || "";
-      const who = r.username ? ("@"+String(r.username).replace(/^@/,"")) : (r.userId || "-");
-      o.textContent = String(r.id || "-") + " | " + who + " | " + String(r.status || "pending");
-      sel.appendChild(o);
-    }
-  }
-  if (target){
-    target.textContent = items.slice(0, 25).map((r) => {
-      const who = r.username ? ("@"+String(r.username).replace(/^@/,"")) : (r.userId || "-");
-      const pid = r.promptId ? (" | prompt:" + r.promptId) : "";
-      return "• " + r.id + " | " + who + " | " + (r.status || "pending") + pid;
-    }).join(String.fromCharCode(10));
-  }
-}
-
-async function refreshTickets(){
-  const { json } = await adminApi("/api/admin/tickets/list", { limit: 100 });
-  if (json?.ok) renderTickets(json.tickets || []);
-}
-
-function applyTicketFilter(status){
-  if (!status) return renderTickets(ADMIN_TICKETS_ALL || [], true);
-  const filtered = (ADMIN_TICKETS_ALL || []).filter((x) => String(x?.status || "pending") === status);
-  renderTickets(filtered, true);
-}
-
-function setAdminTab(tab){
-  const tabs = Array.from(document.querySelectorAll('#adminTabs .chip'));
-  const panes = Array.from(document.querySelectorAll('.admin-tab'));
-  for (const t of tabs) t.classList.toggle('on', t.dataset.tab === tab);
-  for (const p of panes) {
-    const pt = p.dataset.tab || 'overview';
-    p.classList.toggle('hidden', pt !== tab);
-  }
-}
-
-async function refreshWithdrawals(){
-  const { json } = await adminApi("/api/admin/withdrawals/list", {});
-  if (json?.ok) renderWithdrawals(json.withdrawals || []);
-}
-
-async function refreshPromptReqs(){
-  const { json } = await adminApi("/api/admin/custom-prompts/requests", {});
-  if (json?.ok) renderPromptReqs(json.requests || []);
-}
-
-
-function renderUsers(list){
-  const target = el("usersReport");
-  if (!target) return;
-  if (!Array.isArray(list) || !list.length) { target.textContent = "—"; return; }
-  target.textContent = list.map((u) => {
-    const user = u.username ? ("@" + u.username.replace(/^@/, "")) : u.userId;
-    return "• " + user + " | تلفن: " + (u.phone || "—") + " | مدت: " + u.usageDays + " روز | تحلیل موفق: " + u.totalAnalyses + " | آخرین تحلیل: " + (u.lastAnalysisAt || "—") + " | پرداخت: " + u.paymentCount + " (" + (u.paymentTotal || 0) + ") | اشتراک: " + (u.subscriptionType || "free") + " | انقضا: " + (u.subscriptionExpiresAt || "—") + " | سهمیه: " + u.dailyUsed + "/" + u.dailyLimit + " | رفرال: " + u.referralInvites + " | TX: " + (u.lastTxHash || "—") + " | پرامپت: " + (u.customPromptId || "—");
-  }).join("\\n");
-}
-
-function renderFullAdminReport(users, payments, withdrawals, tickets) {
-  const target = el("usersReport");
-  if (!target) return;
-
-  const u = Array.isArray(users) ? users : [];
-  const p = Array.isArray(payments) ? payments : [];
-  const w = Array.isArray(withdrawals) ? withdrawals : [];
-  const t = Array.isArray(tickets) ? tickets : [];
-
-  const head = [
-    "📊 گزارش کامل ادمین (Asia/Tehran)",
-    "کاربران: " + u.length + " | پرداخت‌ها: " + p.length + " | برداشت‌ها: " + w.length + " | تیکت‌ها: " + t.length,
-    "────────────────────",
-  ];
-
-  const usersBlock = u.slice(0, 80).map((x) => {
-    const user = x.username ? ("@" + x.username.replace(/^@/, "")) : x.userId;
-    return "• " + user + " | تحلیل موفق: " + (x.totalAnalyses || 0) + " | سهمیه: " + (x.dailyUsed || 0) + "/" + (x.dailyLimit || 0) + " | اشتراک: " + (x.subscriptionType || "free") + " | TX: " + (x.lastTxHash || "—");
-  });
-
-  const payBlock = p.slice(0, 40).map((x) => "• " + (x.username || x.userId) + " | " + (x.amount || 0) + " | " + (x.status || "-") + " | " + (x.txHash || "—"));
-  const wdBlock = w.slice(0, 40).map((x) => "• " + (x.userId || "-") + " | " + (x.amount || 0) + " | " + (x.status || "pending") + " | " + (x.address || "—"));
-  const tkBlock = t.slice(0, 40).map((x) => "• " + (x.username || x.userId || "-") + " | " + (x.status || "pending") + " | " + String(x.text || "").slice(0, 80));
-
-  target.textContent = [
-    ...head,
-    "👥 کاربران:", ...(usersBlock.length ? usersBlock : ["—"]),
-    "",
-    "💳 پرداخت‌ها:", ...(payBlock.length ? payBlock : ["—"]),
-    "",
-    "➖ برداشت‌ها:", ...(wdBlock.length ? wdBlock : ["—"]),
-    "",
-    "🎫 تیکت‌ها:", ...(tkBlock.length ? tkBlock : ["—"]),
-  ].join(String.fromCharCode(10));
-}
-
-function safeJsonParse(text, fallback) {
-  try { return JSON.parse(text); } catch { return fallback; }
-}
-
-function cacheUserSnapshot(json) {
-  try {
-    const data = {
-      welcome: json?.welcome || "",
-      state: json?.state || {},
-      quota: json?.quota || "",
-      symbols: json?.symbols || [],
-      styles: json?.styles || [],
-      customPrompts: json?.customPrompts || [],
-      offerBanner: json?.offerBanner || "",
-      offerBannerImage: json?.offerBannerImage || "",
-      role: json?.role || "user",
-      isStaff: !!json?.isStaff,
-      wallet: json?.wallet || "",
-      cachedAt: Date.now(),
-    };
-    localStorage.setItem(LOCAL_KEYS.userState, JSON.stringify(data));
-  } catch {}
-}
-
-function readCachedUserSnapshot() {
-  try {
-    return safeJsonParse(localStorage.getItem(LOCAL_KEYS.userState) || "", null);
-  } catch {
-    return null;
-  }
-}
-
-function applyUserState(json) {
-  welcome.textContent = json.welcome || "";
-  fillSymbols(json.symbols || []);
-  const styleList = json.styles || [];
-  fillStyles(styleList);
-  fillCustomPrompts(json.customPrompts || []);
-  if (json.state?.timeframe) setTf(json.state.timeframe);
-  if (json.state?.style && styleList.includes(json.state.style)) {
-    setVal("style", json.state.style);
-  } else if (styleList.length) {
-    setVal("style", styleList[0]);
-  }
-  if (json.state?.risk) setVal("risk", json.state.risk);
-  if (typeof json.state?.customPromptId === "string") setVal("customPrompt", json.state.customPromptId);
-  setVal("newsEnabled", String(!!json.state?.newsEnabled));
-  setVal("promptMode", json.state?.promptMode || "style_plus_custom");
-
-  if (json.state?.selectedSymbol && (json.symbols || []).includes(json.state.selectedSymbol)) {
-    setVal("symbol", json.state.selectedSymbol);
-  } else if (json.symbols?.length) setVal("symbol", json.symbols[0]);
-  if (offerText) offerText.textContent = json.offerBanner || "فعال‌سازی اشتراک ویژه با تخفیف محدود.";
-  if (offerTag) offerTag.textContent = json.role === "owner" ? "Owner" : "Special";
-  if (offerImage) {
-    const img = String(json.offerBannerImage || "").trim();
-    offerImage.style.display = img ? "block" : "none";
-    if (img) offerImage.src = img;
-  }
-
-  updateMeta(json.state, json.quota);
-}
-
-
-function storageGetObj(key, fallback = {}) {
-  try {
-    const raw = localStorage.getItem(key);
-    const parsed = raw ? JSON.parse(raw) : fallback;
-    return parsed && typeof parsed === "object" ? parsed : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function storageSetObj(key, value) {
-  try { localStorage.setItem(key, JSON.stringify(value || {})); } catch {}
-}
-
-function cacheByKey(key, itemKey, value) {
-  const bag = storageGetObj(key, {});
-  bag[itemKey] = { ...(value || {}), cachedAt: Date.now() };
-  storageSetObj(key, bag);
-}
-
-function readByKey(key, itemKey) {
-  const bag = storageGetObj(key, {});
-  return bag[itemKey] || null;
-}
-
-function quoteCacheKey(symbol, timeframe) {
-  return String(symbol || "").toUpperCase() + "|" + String(timeframe || "H4").toUpperCase();
-}
-
-function newsCacheKey(symbol) {
-  return String(symbol || "").toUpperCase();
-}
-
-function analyzeCacheKey(symbol) {
-  return String(symbol || "").toUpperCase();
-}
-
-async function boot(){
-  out.textContent = "⏳ در حال آماده‌سازی…";
-  pillTxt.textContent = "Connecting…";
-  showToast("در حال اتصال…", "دریافت پروفایل و تنظیمات", "API", true);
-
-  const preCached = readCachedUserSnapshot();
-  if (preCached) {
-    applyUserState(preCached);
-    out.textContent = "⏳ در حال همگام‌سازی با سرور…";
-    pillTxt.textContent = "Syncing…";
-    setupLiveQuotePolling();
-    setupNewsPolling();
-  }
-
-  const isTelegramRuntime = !!window.Telegram?.WebApp;
-  const qsInitData = getParamEverywhere("initData") || "";
-  const savedInitData = localStorage.getItem(LOCAL_KEYS.initData) || "";
-  const qsMiniToken = getParamEverywhere("miniToken") || getParamEverywhere("token") || "";
-  const startParamToken = parseMiniTokenStartParam(tg?.initDataUnsafe?.start_param || "");
-  const savedMiniToken = localStorage.getItem(LOCAL_KEYS.miniToken) || "";
-  const resolvedMiniToken = qsMiniToken || startParamToken || savedMiniToken || "";
-  if (resolvedMiniToken) {
-    MINI_TOKEN = resolvedMiniToken;
-    try { localStorage.setItem(LOCAL_KEYS.miniToken, resolvedMiniToken); } catch {}
-  }
-  let initData = (tg?.initData || "").trim();
-
-  // Telegram WebApp may populate initData with a slight delay.
-  if (isTelegramRuntime && !initData) {
-    await new Promise((r) => setTimeout(r, 350));
-    initData = (tg?.initData || "").trim();
-  }
-
-  if (initData) {
-    INIT_DATA = initData;
-    localStorage.setItem(LOCAL_KEYS.initData, initData);
-  } else if (qsInitData) {
-    INIT_DATA = qsInitData;
-    localStorage.setItem(LOCAL_KEYS.initData, qsInitData);
-  } else if (savedInitData) {
-    INIT_DATA = savedInitData;
-  } else if (!isTelegramRuntime) {
-    const devInit = "dev:999001";
-    INIT_DATA = devInit;
-    localStorage.setItem(LOCAL_KEYS.initData, devInit);
-    showToast("حالت آسان فعال شد", "ورود موقت برای تست مینی‌اپ", "DEV", false);
-  } else {
-    INIT_DATA = "";
-    showToast("حالت مهمان", "اتصال احراز نشده؛ اجرای محدود با داده عمومی", "GUEST", false);
-  }
-  let {status, json} = await api("/api/user", buildAuthBody({ allowGuest: true }));
-
-  if (!json?.ok && status === 401 && (MINI_TOKEN || localStorage.getItem(LOCAL_KEYS.miniToken))) {
-    const initBackup = INIT_DATA;
-    INIT_DATA = "";
-    const retry = await api("/api/user", buildAuthBody({ allowGuest: true }));
-    status = retry.status;
-    json = retry.json;
-    if (!json?.ok) INIT_DATA = initBackup;
-  }
-
-  if (!json?.ok) {
-    if (status === 401) {
-      try { localStorage.removeItem(LOCAL_KEYS.initData); } catch {}
-    }
-    const cached = readCachedUserSnapshot();
-    if (!cached) {
-      const fallback = {
-        welcome: "نسخه محدود مینی‌اپ فعال شد.",
-        state: { timeframe: "H4", style: "پرایس اکشن", risk: "متوسط", newsEnabled: true, promptMode: "style_plus_custom", selectedSymbol: "BTCUSDT" },
-        quota: "guest",
-        symbols: ["BTCUSDT","ETHUSDT","XAUUSD","EURUSD"],
-        styles: ["پرایس اکشن","ICT","ATR"],
-        offerBanner: "اتصال محدود؛ برخی امکانات نیازمند احراز تلگرام است.",
-        offerBannerImage: "",
-        role: "user",
-        isStaff: false,
-        customPrompts: [],
-      };
-      OFFLINE_MODE = true;
-      IS_GUEST = true;
-      applyUserState(fallback);
-      pillTxt.textContent = "Offline (Guest)";
-      out.textContent = "حالت محدود فعال شد ✅ داده‌های پایه بارگذاری شدند.";
-      showToast("حالت محدود", "برای همه امکانات، مینی‌اپ را از داخل تلگرام باز کنید.", "GUEST", false);
-      if (status === 401) out.textContent = "اتصال کامل برقرار نشد.\n\n" + MINIAPP_EXEC_CHECKLIST;
-      setupLiveQuotePolling();
-      setupNewsPolling();
-      return;
-    }
-    OFFLINE_MODE = !navigator.onLine;
-    IS_GUEST = true;
-    applyUserState(cached);
-    out.textContent = OFFLINE_MODE
-      ? "حالت آفلاین فعال شد ✅ امکانات از کش محلی بارگذاری می‌شود."
-      : "حالت محدود فعال شد ✅ داده‌های ذخیره‌شده بارگذاری شد و اتصال خواندنی در حال تلاش است.";
-    pillTxt.textContent = OFFLINE_MODE ? "Offline (Cached)" : "Limited (Guest)";
-    hideToast();
-    showToast(OFFLINE_MODE ? "آفلاین" : "حالت محدود", OFFLINE_MODE ? "داده‌های ذخیره‌شده بارگذاری شد" : "اتصال خواندنی مهمان فعال شد", OFFLINE_MODE ? "CACHE" : "GUEST", false);
-    setupLiveQuotePolling();
-    setupNewsPolling();
-    return;
-  }
-
-  OFFLINE_MODE = false;
-  if (json?.miniToken) {
-    MINI_TOKEN = String(json.miniToken || "").trim();
-    try { localStorage.setItem(LOCAL_KEYS.miniToken, MINI_TOKEN); } catch {}
-  }
-  cacheUserSnapshot(json);
-  applyUserState(json);
-  out.textContent = "آماده ✅";
-  pillTxt.textContent = "Online";
-  hideToast();
-  setupLiveQuotePolling();
-  setupNewsPolling();
-  IS_STAFF = !!json.isStaff;
-  IS_OWNER = json.role === "owner";
-  IS_GUEST = !!json.guest;
-
-  const adminTabBtn = document.querySelector(".tab-btn[data-tab="admin"]");
-  if (adminTabBtn) adminTabBtn.style.display = IS_STAFF ? "inline-flex" : "none";
-
-  if (IS_STAFF && adminCard) {
-    adminCard.classList.add("show");
-    setAdminTab("overview");
-    if (adminTitle) adminTitle.textContent = IS_OWNER ? "پنل اونر" : "پنل ادمین";
-
-    // Owner-only blocks
-    document.querySelectorAll(".owner-hide").forEach((x) => {
-      x.classList.toggle("hidden", !IS_OWNER);
+function hideToast() { if (toast)
+    toast.classList.remove("show"); }
+function applyTab(tab) {
+    const raw = tab || "dashboard";
+    const section = (raw === "owner") ? "admin" : raw;
+    document.querySelectorAll(".tab-btn").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.tab === raw);
     });
-
-    if (el("offerBannerInput")) el("offerBannerInput").value = json.offerBanner || "";
-    if (el("offerBannerImageUrlInput")) el("offerBannerImageUrlInput").value = json.offerBannerImage || "";
-    if (IS_OWNER && el("walletAddressInput")) el("walletAddressInput").value = json.wallet || "";
-
-    await loadAdminBootstrap();
-  } else {
-    applyTab("dashboard");
-  }
+    document.querySelectorAll(".tab-section").forEach((sec) => {
+        sec.classList.toggle("active", sec.dataset.tabSection === section);
+    });
+    // If owner opens the owner panel, force admin card to present owner view.
+    if (raw === "owner" && adminTitle)
+        adminTitle.textContent = "\u067E\u0646\u0644 \u0627\u0648\u0646\u0631";
+    if (raw === "admin" && adminTitle)
+        adminTitle.textContent = IS_OWNER ? "\u067E\u0646\u0644 \u0627\u0648\u0646\u0631" : "\u067E\u0646\u0644 \u0627\u062F\u0645\u06CC\u0646";
 }
-
-async function loadAdminBootstrap(){
-  const { json } = await adminApi("/api/admin/bootstrap", {});
-  if (!json?.ok) return;
-
-  if (el("adminPrompt")) el("adminPrompt").value = json.prompt || "";
-  if (el("stylePromptJson")) el("stylePromptJson").value = JSON.stringify(json.stylePrompts || {}, null, 2);
-  if (el("customPromptsJson")) el("customPromptsJson").value = JSON.stringify(json.customPrompts || [], null, 2);
-  if (el("freeDailyLimit")) el("freeDailyLimit").value = String(json.freeDailyLimit ?? "");
-  if (el("offerBannerInput")) el("offerBannerInput").value = json.offerBanner || "";
-  if (el("offerBannerImageUrlInput")) el("offerBannerImageUrlInput").value = json.offerBannerImage || "";
-  if (el("welcomeBotInput")) el("welcomeBotInput").value = json.welcomeBot || "";
-  if (el("welcomeMiniappInput")) el("welcomeMiniappInput").value = json.welcomeMiniapp || "";
-
-  if (json.adminFlags) {
-    if (el("flagCapitalMode")) el("flagCapitalMode").checked = !!json.adminFlags.capitalModeEnabled;
-    if (el("flagProfileTips")) el("flagProfileTips").checked = !!json.adminFlags.profileTipsEnabled;
-  }
-
-  renderStyleList(json.styles || []);
-  renderCommissionList(json.commission || {});
-  renderPayments(json.payments || []);
-  renderTickets(json.tickets || []);
-  renderWithdrawals(json.withdrawals || []);
-  if (offerText) offerText.textContent = json.offerBanner || (offerText.textContent || "");
-  if (offerImage) {
-    const img = String(json.offerBannerImage || "").trim();
-    offerImage.style.display = img ? "block" : "none";
-    if (img) offerImage.src = img;
-  }
-
-  // load prompt requests
-  if (el("promptReqSelect")) await refreshPromptReqs();
+function setupTabs() {
+    const tabs = el("mainTabs");
+    if (!tabs)
+        return;
+    tabs.addEventListener("click", (e) => {
+        var _a, _b;
+        const b = (_b = (_a = e.target) === null || _a === void 0 ? void 0 : _a.closest) === null || _b === void 0 ? void 0 : _b.call(_a, ".tab-btn");
+        if (!b)
+            return;
+        applyTab(b.dataset.tab || "dashboard");
+    });
 }
-
+async function fileToDataUrl(file) {
+    return await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result || ""));
+        r.onerror = () => reject(new Error("file_read_failed"));
+        r.readAsDataURL(file);
+    });
+}
+function fillSymbols(list) {
+    ALL_SYMBOLS = Array.isArray(list) ? list.slice() : [];
+    const sel = el("symbol");
+    const cur = sel.value;
+    sel.innerHTML = "";
+    for (const s of ALL_SYMBOLS) {
+        const opt = document.createElement("option");
+        opt.value = s;
+        opt.textContent = s;
+        sel.appendChild(opt);
+    }
+    if (cur && ALL_SYMBOLS.includes(cur))
+        sel.value = cur;
+}
+function fillStyles(list) {
+    const styles = Array.isArray(list) ? list.slice() : [];
+    const sel = el("style");
+    const cur = sel.value;
+    sel.innerHTML = "";
+    for (const s of styles) {
+        const opt = document.createElement("option");
+        opt.value = s;
+        opt.textContent = s;
+        sel.appendChild(opt);
+    }
+    if (cur && styles.includes(cur))
+        sel.value = cur;
+}
+function fillCustomPrompts(list) {
+    const prompts = Array.isArray(list) ? list.slice() : [];
+    const sel = el("customPrompt");
+    const cur = sel.value;
+    sel.innerHTML = "";
+    const defaultOpt = document.createElement("option");
+    defaultOpt.value = "";
+    defaultOpt.textContent = "\u067E\u06CC\u0634\u200C\u0641\u0631\u0636";
+    sel.appendChild(defaultOpt);
+    for (const p of prompts) {
+        const opt = document.createElement("option");
+        opt.value = String((p === null || p === void 0 ? void 0 : p.id) || "");
+        opt.textContent = (p === null || p === void 0 ? void 0 : p.title) ? String(p.title) : String((p === null || p === void 0 ? void 0 : p.id) || "");
+        sel.appendChild(opt);
+    }
+    if (cur)
+        sel.value = cur;
+}
+function filterSymbols(q) {
+    q = (q || "").trim().toUpperCase();
+    const sel = el("symbol");
+    const cur = sel.value;
+    sel.innerHTML = "";
+    const list = !q ? ALL_SYMBOLS : ALL_SYMBOLS.filter(s => s.includes(q));
+    for (const s of list) {
+        const opt = document.createElement("option");
+        opt.value = s;
+        opt.textContent = s;
+        sel.appendChild(opt);
+    }
+    if (cur && list.includes(cur))
+        sel.value = cur;
+}
+function setTf(tf) {
+    var _a;
+    setVal("timeframe", tf);
+    const chips = ((_a = el("tfChips")) === null || _a === void 0 ? void 0 : _a.querySelectorAll(".chip")) || [];
+    for (const c of chips)
+        c.classList.toggle("on", c.dataset.tf === tf);
+}
+async function api(path, body) {
+    let lastErr = null;
+    const quickBoot = path === "/api/user" && !!(body === null || body === void 0 ? void 0 : body.allowGuest);
+    const attempts = quickBoot ? 2 : 2;
+    for (let i = 0; i < attempts; i++) {
+        try {
+            const ac = new AbortController();
+            const quickMs = i === 0 ? 4500 : 9000;
+            const tm = setTimeout(() => ac.abort("timeout"), quickBoot ? quickMs : (12000 + (i * 4000)));
+            const r = await fetch(apiUrl(path), { method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify(body),
+                signal: ac.signal,
+            });
+            clearTimeout(tm);
+            const j = await r.json().catch(() => null);
+            return { status: r.status, json: j };
+        }
+        catch (e) {
+            lastErr = e;
+            await new Promise((res) => setTimeout(res, 350 * (i + 1)));
+        }
+    }
+    return { status: 599, json: { ok: false, error: String((lastErr === null || lastErr === void 0 ? void 0 : lastErr.message) || lastErr || "network_error") } };
+}
+async function adminApi(path, body) {
+    if (!IS_STAFF)
+        return { status: 403, json: { ok: false, error: "forbidden" } };
+    return api(path, buildAuthBody(body));
+}
+function prettyErr(j, status) {
+    const e = (j === null || j === void 0 ? void 0 : j.error) || "\u0646\u0627\u0645\u0634\u062E\u0635";
+    if (status === 429 && String(e).startsWith("quota_exceeded"))
+        return "\u0633\u0647\u0645\u06CC\u0647 \u0627\u0645\u0631\u0648\u0632 \u062A\u0645\u0627\u0645 \u0634\u062F.";
+    if (status === 403 && String(e) === "onboarding_required")
+        return "\u0644\u0637\u0641\u0627\u064B \u0622\u0646\u0628\u0648\u0631\u062F\u06CC\u0646\u06AF \u0631\u0627 \u06A9\u0627\u0645\u0644 \u06A9\u0646: \u0646\u0627\u0645\u060C \u0634\u0645\u0627\u0631\u0647\u060C \u0633\u0631\u0645\u0627\u06CC\u0647\u060C \u062A\u0639\u06CC\u06CC\u0646\u200C\u0633\u0637\u062D \u0648 \u0633\u0628\u06A9.";
+    if (status === 403 && String(e) === "forbidden")
+        return "\u062F\u0633\u062A\u0631\u0633\u06CC \u0627\u06CC\u0646 \u0628\u062E\u0634 \u0628\u0631\u0627\u06CC \u0646\u0642\u0634 \u0641\u0639\u0644\u06CC \u0634\u0645\u0627 \u0645\u062C\u0627\u0632 \u0646\u06CC\u0633\u062A.";
+    if (status === 401) {
+        if (String(e).includes("initData"))
+            return "\u0627\u062A\u0635\u0627\u0644 \u0645\u06CC\u0646\u06CC\u200C\u0627\u067E \u0645\u0646\u0642\u0636\u06CC \u0634\u062F\u0647\u061B \u0627\u067E \u0631\u0627 \u0645\u062C\u062F\u062F \u0627\u0632 \u062F\u0627\u062E\u0644 \u062A\u0644\u06AF\u0631\u0627\u0645 \u0628\u0627\u0632 \u06A9\u0646\u06CC\u062F.";
+        return "\u0627\u062D\u0631\u0627\u0632 \u0647\u0648\u06CC\u062A \u062A\u0644\u06AF\u0631\u0627\u0645 \u0646\u0627\u0645\u0648\u0641\u0642 \u0627\u0633\u062A.\n\n" + MINIAPP_EXEC_CHECKLIST_TEXT;
+    }
+    return "\u0645\u0634\u06A9\u0644\u06CC \u067E\u06CC\u0634 \u0622\u0645\u062F. \u0644\u0637\u0641\u0627\u064B \u062F\u0648\u0628\u0627\u0631\u0647 \u062A\u0644\u0627\u0634 \u06A9\u0646\u06CC\u062F.";
+}
+function fmtPrice(v) {
+    const n = Number(v);
+    if (!Number.isFinite(n))
+        return "\u2014";
+    const digits = n >= 1000 ? 2 : (n >= 1 ? 4 : 6);
+    return n.toLocaleString("en-US", { maximumFractionDigits: digits });
+}
+function setQuoteUi(data, errMsg = "") {
+    const qSym = el("quoteSymbol");
+    const qPrice = el("quotePrice");
+    const qChange = el("quoteChange");
+    const qTrend = el("quoteTrend");
+    const qStamp = el("quoteStamp");
+    const qMeta = el("quoteMeta");
+    if (!qSym || !qPrice || !qChange || !qTrend || !qStamp || !qMeta)
+        return;
+    if (!(data === null || data === void 0 ? void 0 : data.ok)) {
+        qMeta.textContent = errMsg || "\u062F\u0627\u062F\u0647 \u0642\u06CC\u0645\u062A \u062F\u0631 \u062F\u0633\u062A\u0631\u0633 \u0646\u06CC\u0633\u062A.";
+        qStamp.textContent = "\u2014";
+        return;
+    }
+    const cp = Number(data.changePct || 0);
+    qSym.textContent = data.symbol || "\u2014";
+    qPrice.textContent = fmtPrice(data.price);
+    qChange.textContent = (cp > 0 ? "+" : "") + cp.toFixed(3) + "%";
+    qTrend.textContent = data.trend || "\u0646\u0627\u0645\u0634\u062E\u0635";
+    qChange.classList.remove("q-up", "q-down", "q-flat");
+    qChange.classList.add(data.status === "up" ? "q-up" : (data.status === "down" ? "q-down" : "q-flat"));
+    const dt = data.lastTs ? new Date(Number(data.lastTs)) : new Date();
+    qStamp.textContent = dt.toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    qMeta.textContent = "TF: " + (data.timeframe || "-") + " | candles: " + (data.candles || 0) + " | \u06A9\u06CC\u0641\u06CC\u062A: " + (data.quality === "full" ? "\u06A9\u0627\u0645\u0644" : "\u0645\u062D\u062F\u0648\u062F");
+}
+async function refreshLiveQuote(force = false) {
+    if (QUOTE_BUSY)
+        return;
+    if (!force && document.hidden)
+        return;
+    QUOTE_BUSY = true;
+    try {
+        const symbol = val("symbol") || "";
+        const timeframe = val("timeframe") || "H4";
+        if (!symbol)
+            return;
+        const ck = quoteCacheKey(symbol, timeframe);
+        if (OFFLINE_MODE) {
+            const cached = readByKey(LOCAL_KEYS.quoteCache, ck);
+            setQuoteUi(cached, "\u0642\u06CC\u0645\u062A \u0644\u062D\u0638\u0647\u200C\u0627\u06CC \u0627\u0632 \u06A9\u0634 \u0645\u062D\u0644\u06CC");
+            return;
+        }
+        const { json } = await api("/api/quote", buildAuthBody({ symbol, timeframe, allowGuest: true }));
+        if (json === null || json === void 0 ? void 0 : json.ok) {
+            cacheByKey(LOCAL_KEYS.quoteCache, ck, json);
+            setQuoteUi(json, "");
+            return;
+        }
+        const cached = readByKey(LOCAL_KEYS.quoteCache, ck);
+        setQuoteUi(cached || json, cached ? "\u0642\u06CC\u0645\u062A \u0627\u0632 \u06A9\u0634 \u0646\u0645\u0627\u06CC\u0634 \u062F\u0627\u062F\u0647 \u0634\u062F" : "\u062E\u0637\u0627 \u062F\u0631 \u062F\u0631\u06CC\u0627\u0641\u062A \u0642\u06CC\u0645\u062A \u0644\u062D\u0638\u0647\u200C\u0627\u06CC");
+    }
+    finally {
+        QUOTE_BUSY = false;
+    }
+}
+function setupLiveQuotePolling() {
+    if (QUOTE_TIMER)
+        clearInterval(QUOTE_TIMER);
+    refreshLiveQuote(true);
+    QUOTE_TIMER = setInterval(() => { refreshLiveQuote(false); }, 12000);
+}
+function renderNewsList(json) {
+    const target = el("newsList");
+    if (!target)
+        return;
+    if (!(json === null || json === void 0 ? void 0 : json.ok) || !Array.isArray(json.articles) || !json.articles.length) {
+        target.textContent = "\u0641\u0639\u0644\u0627\u064B \u062E\u0628\u0631 \u0645\u0631\u062A\u0628\u0637\u06CC \u067E\u06CC\u062F\u0627 \u0646\u0634\u062F.";
+        return;
+    }
+    target.innerHTML = "";
+    for (const a of json.articles.slice(0, 6)) {
+        const row = document.createElement("div");
+        const title = document.createElement("a");
+        title.href = a.url || "#";
+        title.target = "_blank";
+        title.rel = "noopener noreferrer";
+        title.textContent = "\u2022 " + String(a.title || "\u0628\u062F\u0648\u0646 \u0639\u0646\u0648\u0627\u0646");
+        title.style.color = "#c7d2fe";
+        title.style.textDecoration = "none";
+        const meta = document.createElement("div");
+        meta.className = "muted";
+        meta.style.fontSize = "11px";
+        meta.textContent = (a.source || "") + (a.publishedAt ? (" | " + a.publishedAt) : "");
+        row.appendChild(title);
+        row.appendChild(meta);
+        row.style.marginBottom = "8px";
+        target.appendChild(row);
+    }
+}
+async function refreshSymbolNews(force = false) {
+    if (!force && document.hidden)
+        return;
+    const symbol = val("symbol") || "";
+    if (!symbol)
+        return;
+    const target = el("newsList");
+    if (target && force)
+        target.textContent = "\u062F\u0631 \u062D\u0627\u0644 \u062F\u0631\u06CC\u0627\u0641\u062A \u062E\u0628\u0631\u2026";
+    const ck = newsCacheKey(symbol);
+    if (OFFLINE_MODE) {
+        const cached = readByKey(LOCAL_KEYS.newsCache, ck);
+        renderNewsList(cached || { ok: false, articles: [] });
+        return;
+    }
+    const { json } = await api("/api/news", buildAuthBody({ symbol, allowGuest: true }));
+    if (json === null || json === void 0 ? void 0 : json.ok) {
+        cacheByKey(LOCAL_KEYS.newsCache, ck, json);
+        renderNewsList(json);
+        return;
+    }
+    const cached = readByKey(LOCAL_KEYS.newsCache, ck);
+    renderNewsList(cached || json);
+}
+async function refreshNewsAnalysis(force = false) {
+    if (!force && document.hidden)
+        return;
+    const symbol = val("symbol") || "";
+    if (!symbol)
+        return;
+    const target = el("newsAnalysis");
+    if (target && force)
+        target.textContent = "\u062F\u0631 \u062D\u0627\u0644 \u062A\u062D\u0644\u06CC\u0644 \u062E\u0628\u0631\u2026";
+    const ck = newsCacheKey(symbol);
+    if (OFFLINE_MODE) {
+        const cached = readByKey(LOCAL_KEYS.newsAnalysisCache, ck);
+        if (target)
+            target.textContent = (cached === null || cached === void 0 ? void 0 : cached.summary) || "\u062A\u062D\u0644\u06CC\u0644 \u062E\u0628\u0631\u06CC \u0622\u0641\u0644\u0627\u06CC\u0646 \u0645\u0648\u062C\u0648\u062F \u0646\u06CC\u0633\u062A.";
+        return;
+    }
+    const { json } = await api("/api/news/analyze", buildAuthBody({ symbol, allowGuest: true }));
+    if (!target)
+        return;
+    if (json === null || json === void 0 ? void 0 : json.ok) {
+        cacheByKey(LOCAL_KEYS.newsAnalysisCache, ck, json);
+        target.textContent = json.summary || "\u2014";
+        return;
+    }
+    const cached = readByKey(LOCAL_KEYS.newsAnalysisCache, ck);
+    target.textContent = (cached === null || cached === void 0 ? void 0 : cached.summary) || "\u062A\u062D\u0644\u06CC\u0644 \u062E\u0628\u0631\u06CC \u062F\u0631 \u062F\u0633\u062A\u0631\u0633 \u0646\u06CC\u0633\u062A.";
+}
+function setupNewsPolling() {
+    if (NEWS_TIMER)
+        clearInterval(NEWS_TIMER);
+    refreshSymbolNews(true);
+    refreshNewsAnalysis(true);
+    NEWS_TIMER = setInterval(() => { refreshSymbolNews(false); refreshNewsAnalysis(false); }, 60000);
+}
+function renderChartFallbackSvg(svgText) {
+    const chartCard = el("chartCard");
+    const chartImg = el("chartImg");
+    if (!chartCard || !chartImg || !svgText)
+        return;
+    const svgUrl = "data:image/svg+xml;utf8," + encodeURIComponent(svgText);
+    chartImg.src = svgUrl;
+    chartCard.style.display = "block";
+    const cm = el("chartMeta");
+    if (cm)
+        cm.textContent = "Internal Zones Renderer";
+}
+function pickTicketReplyTemplate() {
+    var _a;
+    const tpl = ((_a = el("ticketReplyTemplate")) === null || _a === void 0 ? void 0 : _a.value) || "";
+    if (!tpl)
+        return;
+    const input = el("ticketReply");
+    if (!input)
+        return;
+    if (!input.value.trim())
+        input.value = tpl;
+}
+function updateMeta(state, quota) {
+    const qRaw = String(quota || "-");
+    let energy = "\u2014";
+    let remainTxt = "\u221E";
+    const m = qRaw.match(/^(\d+)\/(\d+)$/);
+    if (m) {
+        const used = Number(m[1] || 0);
+        const lim = Math.max(1, Number(m[2] || 1));
+        const remain = Math.max(0, lim - used);
+        const pct = Math.max(0, Math.min(100, Math.round((remain / lim) * 100)));
+        energy = pct + "%";
+        remainTxt = String(remain);
+    }
+    else if (qRaw === "\u221E") {
+        energy = "100%";
+        remainTxt = "\u221E";
+    }
+    meta.textContent = "\u0627\u0646\u0631\u0698\u06CC: " + energy + " | \u062A\u062D\u0644\u06CC\u0644 \u0628\u0627\u0642\u06CC\u200C\u0645\u0627\u0646\u062F\u0647: " + remainTxt + " | \u0633\u0647\u0645\u06CC\u0647: " + qRaw;
+    sub.textContent = "ID: " + ((state === null || state === void 0 ? void 0 : state.userId) || "-") + " | \u0627\u0645\u0631\u0648\u0632(Tehran): " + ((state === null || state === void 0 ? void 0 : state.dailyDate) || "-");
+    const q = String(quota || "");
+    const m2 = q.match(/(\d+)\s*\/\s*(\d+)/);
+    let used = 0;
+    let limit = 0;
+    if (m2) {
+        used = Number(m2[1] || 0);
+        limit = Number(m2[2] || 0);
+    }
+    const remaining = Math.max(0, limit - used);
+    const pct = limit > 0 ? Math.max(0, Math.min(100, Math.round((remaining / limit) * 100))) : 100;
+    if (remainingText)
+        remainingText.textContent = "\u062A\u062D\u0644\u06CC\u0644 \u0628\u0627\u0642\u06CC\u200C\u0645\u0627\u0646\u062F\u0647: " + (limit > 0 ? String(remaining) : "\u221E");
+    if (energyText)
+        energyText.textContent = "\u0627\u0646\u0631\u0698\u06CC: " + (limit > 0 ? (pct + "%") : "\u0646\u0627\u0645\u062D\u062F\u0648\u062F");
+    if (energyFill)
+        energyFill.style.width = (limit > 0 ? pct : 100) + "%";
+}
+function updateDashboardStats(role, quota) {
+    const raw = String(quota || "0/0");
+    let used = 0, limit = 0;
+    if (raw.includes("/")) {
+        const [u, l] = raw.split("/");
+        used = Number(u) || 0;
+        limit = Number(l) || 0;
+    }
+    const remain = (Number.isFinite(limit) && limit > 0) ? Math.max(0, limit - used) : (raw === "\u221E" ? "\u221E" : 0);
+    if (roleLabel)
+        roleLabel.textContent = role || "user";
+    if (energyToday)
+        energyToday.textContent = raw === "\u221E" ? "\u0646\u0627\u0645\u062D\u062F\u0648\u062F" : String(used);
+    if (remainingAnalyses)
+        remainingAnalyses.textContent = String(remain);
+}
+function setOfferImage(url) {
+    const clean = String(url || "").trim();
+    if (!offerMedia || !offerImg)
+        return;
+    if (!clean) {
+        offerImg.removeAttribute("src");
+        offerMedia.classList.remove("show");
+        return;
+    }
+    offerImg.src = clean;
+    offerMedia.classList.add("show");
+}
+function renderStyleList(styles) {
+    const target = el("styleList");
+    if (!target)
+        return;
+    target.textContent = Array.isArray(styles) && styles.length ? styles.join(" \u2022 ") : "\u2014";
+}
+function renderCommissionList(commission) {
+    var _a;
+    const target = el("commissionList");
+    if (!target)
+        return;
+    const global = (_a = commission === null || commission === void 0 ? void 0 : commission.globalPercent) !== null && _a !== void 0 ? _a : 0;
+    const overrides = (commission === null || commission === void 0 ? void 0 : commission.overrides) || {};
+    const lines = ["\u06A9\u0644\u06CC: " + global + "%"];
+    for (const [k, v] of Object.entries(overrides))
+        lines.push(String(k) + ": " + String(v) + "%");
+    target.textContent = lines.join("\\n");
+}
+function renderPayments(list) {
+    const target = el("paymentList");
+    if (!target)
+        return;
+    if (!Array.isArray(list) || !list.length) {
+        target.textContent = "\u2014";
+        return;
+    }
+    target.textContent = list.slice(0, 8).map((p) => {
+        const who = p.username || p.userId;
+        return "\u2022 " + who + " | " + p.amount + " | " + p.status + " | " + (p.txHash || "\u2014");
+    }).join("\\n");
+}
+function shortText(s, n = 80) {
+    s = String(s || "").replace(/\s+/g, " ").trim();
+    return s.length > n ? (s.slice(0, n) + "\u2026") : s;
+}
+function renderTickets(list, keepMaster = false) {
+    ADMIN_TICKETS = Array.isArray(list) ? list.slice() : [];
+    if (!keepMaster)
+        ADMIN_TICKETS_ALL = ADMIN_TICKETS.slice();
+    const sel = el("ticketSelect");
+    const target = el("ticketsList");
+    if (sel)
+        sel.innerHTML = "";
+    if (!ADMIN_TICKETS.length) {
+        if (sel) {
+            const o = document.createElement("option");
+            o.value = "";
+            o.textContent = "\u2014";
+            sel.appendChild(o);
+        }
+        if (target)
+            target.textContent = "\u2014";
+        return;
+    }
+    const items = ADMIN_TICKETS.slice().sort((a, b) => String((b === null || b === void 0 ? void 0 : b.createdAt) || "").localeCompare(String((a === null || a === void 0 ? void 0 : a.createdAt) || "")));
+    if (sel) {
+        for (const t of items) {
+            const o = document.createElement("option");
+            o.value = t.id || "";
+            const who = t.username ? ("@" + String(t.username).replace(/^@/, "")) : (t.userId || "-");
+            o.textContent = String(t.id || "-") + " | " + who + " | " + String(t.status || "pending");
+            sel.appendChild(o);
+        }
+    }
+    if (target) {
+        target.textContent = items.slice(0, 25).map((t) => {
+            const who = t.username ? ("@" + String(t.username).replace(/^@/, "")) : (t.userId || "-");
+            return "\u2022 " + t.id + " | " + who + " | " + (t.status || "pending") + " | " + shortText(t.text, 80);
+        }).join(String.fromCharCode(10));
+    }
+}
+function renderWithdrawals(list) {
+    ADMIN_WITHDRAWALS = Array.isArray(list) ? list.slice() : [];
+    const sel = el("withdrawSelect");
+    const target = el("withdrawalsList");
+    if (sel)
+        sel.innerHTML = "";
+    if (!ADMIN_WITHDRAWALS.length) {
+        if (sel) {
+            const o = document.createElement("option");
+            o.value = "";
+            o.textContent = "\u2014";
+            sel.appendChild(o);
+        }
+        if (target)
+            target.textContent = "\u2014";
+        return;
+    }
+    const items = ADMIN_WITHDRAWALS.slice().sort((a, b) => String((b === null || b === void 0 ? void 0 : b.createdAt) || "").localeCompare(String((a === null || a === void 0 ? void 0 : a.createdAt) || "")));
+    if (sel) {
+        for (const w of items) {
+            const o = document.createElement("option");
+            o.value = w.id || "";
+            o.textContent = String(w.id || "-") + " | " + String(w.userId || "-") + " | " + String(w.amount || 0) + " | " + String(w.status || "pending");
+            sel.appendChild(o);
+        }
+    }
+    if (target) {
+        target.textContent = items.slice(0, 25).map((w) => {
+            return "\u2022 " + w.id + " | " + (w.userId || "-") + " | " + (w.amount || 0) + " | " + (w.status || "pending") + " | " + shortText(w.address, 32);
+        }).join(String.fromCharCode(10));
+    }
+}
+function renderPromptReqs(list) {
+    ADMIN_PROMPT_REQS = Array.isArray(list) ? list.slice() : [];
+    const sel = el("promptReqSelect");
+    const target = el("promptReqList");
+    if (sel)
+        sel.innerHTML = "";
+    if (!ADMIN_PROMPT_REQS.length) {
+        if (sel) {
+            const o = document.createElement("option");
+            o.value = "";
+            o.textContent = "\u2014";
+            sel.appendChild(o);
+        }
+        if (target)
+            target.textContent = "\u2014";
+        return;
+    }
+    const items = ADMIN_PROMPT_REQS.slice().sort((a, b) => String((b === null || b === void 0 ? void 0 : b.createdAt) || "").localeCompare(String((a === null || a === void 0 ? void 0 : a.createdAt) || "")));
+    if (sel) {
+        for (const r of items) {
+            const o = document.createElement("option");
+            o.value = r.id || "";
+            const who = r.username ? ("@" + String(r.username).replace(/^@/, "")) : (r.userId || "-");
+            o.textContent = String(r.id || "-") + " | " + who + " | " + String(r.status || "pending");
+            sel.appendChild(o);
+        }
+    }
+    if (target) {
+        target.textContent = items.slice(0, 25).map((r) => {
+            const who = r.username ? ("@" + String(r.username).replace(/^@/, "")) : (r.userId || "-");
+            const pid = r.promptId ? (" | prompt:" + r.promptId) : "";
+            return "\u2022 " + r.id + " | " + who + " | " + (r.status || "pending") + pid;
+        }).join(String.fromCharCode(10));
+    }
+}
+async function refreshTickets() {
+    const { json } = await adminApi("/api/admin/tickets/list", { limit: 100 });
+    if (json === null || json === void 0 ? void 0 : json.ok)
+        renderTickets(json.tickets || []);
+}
+function applyTicketFilter(status) {
+    if (!status)
+        return renderTickets(ADMIN_TICKETS_ALL || [], true);
+    const filtered = (ADMIN_TICKETS_ALL || []).filter((x) => String((x === null || x === void 0 ? void 0 : x.status) || "pending") === status);
+    renderTickets(filtered, true);
+}
+function setAdminTab(tab) {
+    const tabs = Array.from(document.querySelectorAll('#adminTabs .chip'));
+    const panes = Array.from(document.querySelectorAll('.admin-tab'));
+    for (const t of tabs)
+        t.classList.toggle('on', t.dataset.tab === tab);
+    for (const p of panes) {
+        const pt = p.dataset.tab || 'overview';
+        p.classList.toggle('hidden', pt !== tab);
+    }
+}
+async function refreshWithdrawals() {
+    const { json } = await adminApi("/api/admin/withdrawals/list", {});
+    if (json === null || json === void 0 ? void 0 : json.ok)
+        renderWithdrawals(json.withdrawals || []);
+}
+async function refreshPromptReqs() {
+    const { json } = await adminApi("/api/admin/custom-prompts/requests", {});
+    if (json === null || json === void 0 ? void 0 : json.ok)
+        renderPromptReqs(json.requests || []);
+}
+function renderUsers(list) {
+    const target = el("usersReport");
+    if (!target)
+        return;
+    if (!Array.isArray(list) || !list.length) {
+        target.textContent = "\u2014";
+        return;
+    }
+    target.textContent = list.map((u) => {
+        const user = u.username ? ("@" + u.username.replace(/^@/, "")) : u.userId;
+        return "\u2022 " + user + " | \u062A\u0644\u0641\u0646: " + (u.phone || "\u2014") + " | \u0645\u062F\u062A: " + u.usageDays + " \u0631\u0648\u0632 | \u062A\u062D\u0644\u06CC\u0644 \u0645\u0648\u0641\u0642: " + u.totalAnalyses + " | \u0622\u062E\u0631\u06CC\u0646 \u062A\u062D\u0644\u06CC\u0644: " + (u.lastAnalysisAt || "\u2014") + " | \u067E\u0631\u062F\u0627\u062E\u062A: " + u.paymentCount + " (" + (u.paymentTotal || 0) + ") | \u0627\u0634\u062A\u0631\u0627\u06A9: " + (u.subscriptionType || "free") + " | \u0627\u0646\u0642\u0636\u0627: " + (u.subscriptionExpiresAt || "\u2014") + " | \u0633\u0647\u0645\u06CC\u0647: " + u.dailyUsed + "/" + u.dailyLimit + " | \u0631\u0641\u0631\u0627\u0644: " + u.referralInvites + " | TX: " + (u.lastTxHash || "\u2014") + " | \u067E\u0631\u0627\u0645\u067E\u062A: " + (u.customPromptId || "\u2014");
+    }).join("\\n");
+}
+function renderFullAdminReport(users, payments, withdrawals, tickets) {
+    const target = el("usersReport");
+    if (!target)
+        return;
+    const u = Array.isArray(users) ? users : [];
+    const p = Array.isArray(payments) ? payments : [];
+    const w = Array.isArray(withdrawals) ? withdrawals : [];
+    const t = Array.isArray(tickets) ? tickets : [];
+    const head = [
+        "\uD83D\uDCCA \u06AF\u0632\u0627\u0631\u0634 \u06A9\u0627\u0645\u0644 \u0627\u062F\u0645\u06CC\u0646 (Asia/Tehran)",
+        "\u06A9\u0627\u0631\u0628\u0631\u0627\u0646: " + u.length + " | \u067E\u0631\u062F\u0627\u062E\u062A\u200C\u0647\u0627: " + p.length + " | \u0628\u0631\u062F\u0627\u0634\u062A\u200C\u0647\u0627: " + w.length + " | \u062A\u06CC\u06A9\u062A\u200C\u0647\u0627: " + t.length,
+        "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+    ];
+    const usersBlock = u.slice(0, 80).map((x) => {
+        const user = x.username ? ("@" + x.username.replace(/^@/, "")) : x.userId;
+        return "\u2022 " + user + " | \u062A\u062D\u0644\u06CC\u0644 \u0645\u0648\u0641\u0642: " + (x.totalAnalyses || 0) + " | \u0633\u0647\u0645\u06CC\u0647: " + (x.dailyUsed || 0) + "/" + (x.dailyLimit || 0) + " | \u0627\u0634\u062A\u0631\u0627\u06A9: " + (x.subscriptionType || "free") + " | TX: " + (x.lastTxHash || "\u2014");
+    });
+    const payBlock = p.slice(0, 40).map((x) => "\u2022 " + (x.username || x.userId) + " | " + (x.amount || 0) + " | " + (x.status || "-") + " | " + (x.txHash || "\u2014"));
+    const wdBlock = w.slice(0, 40).map((x) => "\u2022 " + (x.userId || "-") + " | " + (x.amount || 0) + " | " + (x.status || "pending") + " | " + (x.address || "\u2014"));
+    const tkBlock = t.slice(0, 40).map((x) => "\u2022 " + (x.username || x.userId || "-") + " | " + (x.status || "pending") + " | " + String(x.text || "").slice(0, 80));
+    target.textContent = [
+        ...head,
+        "\uD83D\uDC65 \u06A9\u0627\u0631\u0628\u0631\u0627\u0646:", ...(usersBlock.length ? usersBlock : ["\u2014"]),
+        "",
+        "\uD83D\uDCB3 \u067E\u0631\u062F\u0627\u062E\u062A\u200C\u0647\u0627:", ...(payBlock.length ? payBlock : ["\u2014"]),
+        "",
+        "\u2796 \u0628\u0631\u062F\u0627\u0634\u062A\u200C\u0647\u0627:", ...(wdBlock.length ? wdBlock : ["\u2014"]),
+        "",
+        "\uD83C\uDFAB \u062A\u06CC\u06A9\u062A\u200C\u0647\u0627:", ...(tkBlock.length ? tkBlock : ["\u2014"]),
+    ].join(String.fromCharCode(10));
+}
+function safeJsonParse(text, fallback) {
+    try {
+        return JSON.parse(text);
+    }
+    catch (_a) {
+        return fallback;
+    }
+}
+function cacheUserSnapshot(json) {
+    try {
+        const data = {
+            welcome: (json === null || json === void 0 ? void 0 : json.welcome) || "",
+            state: (json === null || json === void 0 ? void 0 : json.state) || {},
+            quota: (json === null || json === void 0 ? void 0 : json.quota) || "",
+            symbols: (json === null || json === void 0 ? void 0 : json.symbols) || [],
+            styles: (json === null || json === void 0 ? void 0 : json.styles) || [],
+            customPrompts: (json === null || json === void 0 ? void 0 : json.customPrompts) || [],
+            offerBanner: (json === null || json === void 0 ? void 0 : json.offerBanner) || "",
+            offerBannerImage: (json === null || json === void 0 ? void 0 : json.offerBannerImage) || "",
+            role: (json === null || json === void 0 ? void 0 : json.role) || "user",
+            isStaff: !!(json === null || json === void 0 ? void 0 : json.isStaff),
+            wallet: (json === null || json === void 0 ? void 0 : json.wallet) || "",
+            cachedAt: Date.now(),
+        };
+        localStorage.setItem(LOCAL_KEYS.userState, JSON.stringify(data));
+    }
+    catch (_a) { }
+}
+function readCachedUserSnapshot() {
+    try {
+        return safeJsonParse(localStorage.getItem(LOCAL_KEYS.userState) || "", null);
+    }
+    catch (_a) {
+        return null;
+    }
+}
+function applyUserState(json) {
+    var _a, _b, _c, _d, _e, _f, _g, _h;
+    welcome.textContent = json.welcome || "";
+    fillSymbols(json.symbols || []);
+    const styleList = json.styles || [];
+    fillStyles(styleList);
+    fillCustomPrompts(json.customPrompts || []);
+    if ((_a = json.state) === null || _a === void 0 ? void 0 : _a.timeframe)
+        setTf(json.state.timeframe);
+    if (((_b = json.state) === null || _b === void 0 ? void 0 : _b.style) && styleList.includes(json.state.style)) {
+        setVal("style", json.state.style);
+    }
+    else if (styleList.length) {
+        setVal("style", styleList[0]);
+    }
+    if ((_c = json.state) === null || _c === void 0 ? void 0 : _c.risk)
+        setVal("risk", json.state.risk);
+    if (typeof ((_d = json.state) === null || _d === void 0 ? void 0 : _d.customPromptId) === "string")
+        setVal("customPrompt", json.state.customPromptId);
+    setVal("newsEnabled", String(!!((_e = json.state) === null || _e === void 0 ? void 0 : _e.newsEnabled)));
+    setVal("promptMode", ((_f = json.state) === null || _f === void 0 ? void 0 : _f.promptMode) || "style_only");
+    if (((_g = json.state) === null || _g === void 0 ? void 0 : _g.selectedSymbol) && (json.symbols || []).includes(json.state.selectedSymbol)) {
+        setVal("symbol", json.state.selectedSymbol);
+    }
+    else if ((_h = json.symbols) === null || _h === void 0 ? void 0 : _h.length)
+        setVal("symbol", json.symbols[0]);
+    if (offerText)
+        offerText.textContent = json.offerBanner || "\u0641\u0639\u0627\u0644\u200C\u0633\u0627\u0632\u06CC \u0627\u0634\u062A\u0631\u0627\u06A9 \u0648\u06CC\u0698\u0647 \u0628\u0627 \u062A\u062E\u0641\u06CC\u0641 \u0645\u062D\u062F\u0648\u062F.";
+    if (offerTag)
+        offerTag.textContent = json.role === "owner" ? "Owner" : "Special";
+    if (offerImage) {
+        const img = String(json.offerBannerImage || "").trim();
+        offerImage.style.display = img ? "block" : "none";
+        if (img)
+            offerImage.src = img;
+    }
+    updateMeta(json.state, json.quota);
+}
+function storageGetObj(key, fallback = {}) {
+    try {
+        const raw = localStorage.getItem(key);
+        const parsed = raw ? JSON.parse(raw) : fallback;
+        return parsed && typeof parsed === "object" ? parsed : fallback;
+    }
+    catch (_a) {
+        return fallback;
+    }
+}
+function storageSetObj(key, value) {
+    try {
+        localStorage.setItem(key, JSON.stringify(value || {}));
+    }
+    catch (_a) { }
+}
+function cacheByKey(key, itemKey, value) {
+    const bag = storageGetObj(key, {});
+    bag[itemKey] = Object.assign(Object.assign({}, (value || {})), { cachedAt: Date.now() });
+    storageSetObj(key, bag);
+}
+function readByKey(key, itemKey) {
+    const bag = storageGetObj(key, {});
+    return bag[itemKey] || null;
+}
+function quoteCacheKey(symbol, timeframe) {
+    return String(symbol || "").toUpperCase() + "|" + String(timeframe || "H4").toUpperCase();
+}
+function newsCacheKey(symbol) {
+    return String(symbol || "").toUpperCase();
+}
+function analyzeCacheKey(symbol) {
+    return String(symbol || "").toUpperCase();
+}
+async function boot() {
+    var _a, _b;
+    out.textContent = "\u23F3 \u062F\u0631 \u062D\u0627\u0644 \u0622\u0645\u0627\u062F\u0647\u200C\u0633\u0627\u0632\u06CC\u2026";
+    pillTxt.textContent = "Connecting\u2026";
+    showToast("\u062F\u0631 \u062D\u0627\u0644 \u0627\u062A\u0635\u0627\u0644\u2026", "\u062F\u0631\u06CC\u0627\u0641\u062A \u067E\u0631\u0648\u0641\u0627\u06CC\u0644 \u0648 \u062A\u0646\u0638\u06CC\u0645\u0627\u062A", "API", true);
+    const preCached = readCachedUserSnapshot();
+    if (preCached) {
+        applyUserState(preCached);
+        out.textContent = "\u23F3 \u062F\u0631 \u062D\u0627\u0644 \u0647\u0645\u06AF\u0627\u0645\u200C\u0633\u0627\u0632\u06CC \u0628\u0627 \u0633\u0631\u0648\u0631\u2026";
+        pillTxt.textContent = "Syncing\u2026";
+        setupLiveQuotePolling();
+        setupNewsPolling();
+    }
+    const isTelegramRuntime = !!((_a = window.Telegram) === null || _a === void 0 ? void 0 : _a.WebApp);
+    const qsInitData = getParamEverywhere("initData") || "";
+    const savedInitData = localStorage.getItem(LOCAL_KEYS.initData) || "";
+    const qsMiniToken = getParamEverywhere("miniToken") || getParamEverywhere("token") || "";
+    const startParamToken = parseMiniTokenStartParam(((_b = tg === null || tg === void 0 ? void 0 : tg.initDataUnsafe) === null || _b === void 0 ? void 0 : _b.start_param) || "");
+    const savedMiniToken = localStorage.getItem(LOCAL_KEYS.miniToken) || "";
+    const resolvedMiniToken = qsMiniToken || startParamToken || savedMiniToken || "";
+    if (resolvedMiniToken) {
+        MINI_TOKEN = resolvedMiniToken;
+        try {
+            localStorage.setItem(LOCAL_KEYS.miniToken, resolvedMiniToken);
+        }
+        catch (_c) { }
+    }
+    let initData = ((tg === null || tg === void 0 ? void 0 : tg.initData) || "").trim();
+    // Telegram WebApp may populate initData with a slight delay.
+    if (isTelegramRuntime && !initData) {
+        await new Promise((r) => setTimeout(r, 350));
+        initData = ((tg === null || tg === void 0 ? void 0 : tg.initData) || "").trim();
+    }
+    if (initData) {
+        INIT_DATA = initData;
+        localStorage.setItem(LOCAL_KEYS.initData, initData);
+    }
+    else if (qsInitData) {
+        INIT_DATA = qsInitData;
+        localStorage.setItem(LOCAL_KEYS.initData, qsInitData);
+    }
+    else if (savedInitData) {
+        INIT_DATA = savedInitData;
+    }
+    else if (!isTelegramRuntime) {
+        const devInit = "dev:999001";
+        INIT_DATA = devInit;
+        localStorage.setItem(LOCAL_KEYS.initData, devInit);
+        showToast("\u062D\u0627\u0644\u062A \u0622\u0633\u0627\u0646 \u0641\u0639\u0627\u0644 \u0634\u062F", "\u0648\u0631\u0648\u062F \u0645\u0648\u0642\u062A \u0628\u0631\u0627\u06CC \u062A\u0633\u062A \u0645\u06CC\u0646\u06CC\u200C\u0627\u067E", "DEV", false);
+    }
+    else {
+        INIT_DATA = "";
+        showToast("\u062D\u0627\u0644\u062A \u0645\u0647\u0645\u0627\u0646", "\u0627\u062A\u0635\u0627\u0644 \u0627\u062D\u0631\u0627\u0632 \u0646\u0634\u062F\u0647\u061B \u0627\u062C\u0631\u0627\u06CC \u0645\u062D\u062F\u0648\u062F \u0628\u0627 \u062F\u0627\u062F\u0647 \u0639\u0645\u0648\u0645\u06CC", "GUEST", false);
+    }
+    let { status, json } = await api("/api/user", buildAuthBody({ allowGuest: true }));
+    if (!(json === null || json === void 0 ? void 0 : json.ok) && status === 401 && (MINI_TOKEN || localStorage.getItem(LOCAL_KEYS.miniToken))) {
+        const initBackup = INIT_DATA;
+        INIT_DATA = "";
+        const retry = await api("/api/user", buildAuthBody({ allowGuest: true }));
+        status = retry.status;
+        json = retry.json;
+        if (!(json === null || json === void 0 ? void 0 : json.ok))
+            INIT_DATA = initBackup;
+    }
+    if (!(json === null || json === void 0 ? void 0 : json.ok)) {
+        if (status === 401) {
+            try {
+                localStorage.removeItem(LOCAL_KEYS.initData);
+            }
+            catch (_d) { }
+        }
+        const cached = readCachedUserSnapshot();
+        if (!cached) {
+            const fallback = {
+                welcome: "\u0646\u0633\u062E\u0647 \u0645\u062D\u062F\u0648\u062F \u0645\u06CC\u0646\u06CC\u200C\u0627\u067E \u0641\u0639\u0627\u0644 \u0634\u062F.",
+                state: { timeframe: "H4", style: "\u067E\u0631\u0627\u06CC\u0633 \u0627\u06A9\u0634\u0646", risk: "\u0645\u062A\u0648\u0633\u0637", newsEnabled: true, promptMode: "style_only", selectedSymbol: "BTCUSDT" },
+                quota: "guest",
+                symbols: ["BTCUSDT", "ETHUSDT", "XAUUSD", "EURUSD"],
+                styles: ["\u067E\u0631\u0627\u06CC\u0633 \u0627\u06A9\u0634\u0646", "ICT", "ATR"],
+                offerBanner: "\u0627\u062A\u0635\u0627\u0644 \u0645\u062D\u062F\u0648\u062F\u061B \u0628\u0631\u062E\u06CC \u0627\u0645\u06A9\u0627\u0646\u0627\u062A \u0646\u06CC\u0627\u0632\u0645\u0646\u062F \u0627\u062D\u0631\u0627\u0632 \u062A\u0644\u06AF\u0631\u0627\u0645 \u0627\u0633\u062A.",
+                offerBannerImage: "",
+                role: "user",
+                isStaff: false,
+                customPrompts: [],
+            };
+            OFFLINE_MODE = true;
+            IS_GUEST = true;
+            applyUserState(fallback);
+            pillTxt.textContent = "Offline (Guest)";
+            out.textContent = "\u062D\u0627\u0644\u062A \u0645\u062D\u062F\u0648\u062F \u0641\u0639\u0627\u0644 \u0634\u062F \u2705 \u062F\u0627\u062F\u0647\u200C\u0647\u0627\u06CC \u067E\u0627\u06CC\u0647 \u0628\u0627\u0631\u06AF\u0630\u0627\u0631\u06CC \u0634\u062F\u0646\u062F.";
+            showToast("\u062D\u0627\u0644\u062A \u0645\u062D\u062F\u0648\u062F", "\u0628\u0631\u0627\u06CC \u0647\u0645\u0647 \u0627\u0645\u06A9\u0627\u0646\u0627\u062A\u060C \u0645\u06CC\u0646\u06CC\u200C\u0627\u067E \u0631\u0627 \u0627\u0632 \u062F\u0627\u062E\u0644 \u062A\u0644\u06AF\u0631\u0627\u0645 \u0628\u0627\u0632 \u06A9\u0646\u06CC\u062F.", "GUEST", false);
+            if (status === 401)
+                out.textContent = "\u0627\u062A\u0635\u0627\u0644 \u06A9\u0627\u0645\u0644 \u0628\u0631\u0642\u0631\u0627\u0631 \u0646\u0634\u062F.\n\n" + MINIAPP_EXEC_CHECKLIST_TEXT;
+            setupLiveQuotePolling();
+            setupNewsPolling();
+            return;
+        }
+        OFFLINE_MODE = !navigator.onLine;
+        IS_GUEST = true;
+        applyUserState(cached);
+        out.textContent = OFFLINE_MODE
+            ? "\u062D\u0627\u0644\u062A \u0622\u0641\u0644\u0627\u06CC\u0646 \u0641\u0639\u0627\u0644 \u0634\u062F \u2705 \u0627\u0645\u06A9\u0627\u0646\u0627\u062A \u0627\u0632 \u06A9\u0634 \u0645\u062D\u0644\u06CC \u0628\u0627\u0631\u06AF\u0630\u0627\u0631\u06CC \u0645\u06CC\u200C\u0634\u0648\u062F."
+            : "\u062D\u0627\u0644\u062A \u0645\u062D\u062F\u0648\u062F \u0641\u0639\u0627\u0644 \u0634\u062F \u2705 \u062F\u0627\u062F\u0647\u200C\u0647\u0627\u06CC \u0630\u062E\u06CC\u0631\u0647\u200C\u0634\u062F\u0647 \u0628\u0627\u0631\u06AF\u0630\u0627\u0631\u06CC \u0634\u062F \u0648 \u0627\u062A\u0635\u0627\u0644 \u062E\u0648\u0627\u0646\u062F\u0646\u06CC \u062F\u0631 \u062D\u0627\u0644 \u062A\u0644\u0627\u0634 \u0627\u0633\u062A.";
+        pillTxt.textContent = OFFLINE_MODE ? "Offline (Cached)" : "Limited (Guest)";
+        hideToast();
+        showToast(OFFLINE_MODE ? "\u0622\u0641\u0644\u0627\u06CC\u0646" : "\u062D\u0627\u0644\u062A \u0645\u062D\u062F\u0648\u062F", OFFLINE_MODE ? "\u062F\u0627\u062F\u0647\u200C\u0647\u0627\u06CC \u0630\u062E\u06CC\u0631\u0647\u200C\u0634\u062F\u0647 \u0628\u0627\u0631\u06AF\u0630\u0627\u0631\u06CC \u0634\u062F" : "\u0627\u062A\u0635\u0627\u0644 \u062E\u0648\u0627\u0646\u062F\u0646\u06CC \u0645\u0647\u0645\u0627\u0646 \u0641\u0639\u0627\u0644 \u0634\u062F", OFFLINE_MODE ? "CACHE" : "GUEST", false);
+        setupLiveQuotePolling();
+        setupNewsPolling();
+        return;
+    }
+    OFFLINE_MODE = false;
+    if (json === null || json === void 0 ? void 0 : json.miniToken) {
+        MINI_TOKEN = String(json.miniToken || "").trim();
+        try {
+            localStorage.setItem(LOCAL_KEYS.miniToken, MINI_TOKEN);
+        }
+        catch (_e) { }
+    }
+    cacheUserSnapshot(json);
+    applyUserState(json);
+    out.textContent = "\u0622\u0645\u0627\u062F\u0647 \u2705";
+    pillTxt.textContent = "Online";
+    hideToast();
+    setupLiveQuotePolling();
+    setupNewsPolling();
+    IS_STAFF = !!json.isStaff;
+    IS_OWNER = json.role === "owner";
+    IS_GUEST = !!json.guest;
+    const adminTabBtn = document.querySelector('.tab-btn[data-tab="admin"]');
+    const ownerTabBtn = document.querySelector('.tab-btn[data-tab="owner"]');
+    if (adminTabBtn)
+        adminTabBtn.style.display = IS_STAFF ? "inline-flex" : "none";
+    if (ownerTabBtn)
+        ownerTabBtn.style.display = IS_OWNER ? "inline-flex" : "none";
+    if (IS_STAFF && adminCard) {
+        adminCard.classList.add("show");
+        setAdminTab("overview");
+        if (adminTitle)
+            adminTitle.textContent = IS_OWNER ? "\u067E\u0646\u0644 \u0627\u0648\u0646\u0631" : "\u067E\u0646\u0644 \u0627\u062F\u0645\u06CC\u0646";
+        // Owner-only blocks
+        document.querySelectorAll(".owner-hide").forEach((x) => {
+            x.classList.toggle("hidden", !IS_OWNER);
+        });
+        if (el("offerBannerInput"))
+            el("offerBannerInput").value = json.offerBanner || "";
+        if (el("offerBannerImageUrlInput"))
+            el("offerBannerImageUrlInput").value = json.offerBannerImage || "";
+        if (IS_OWNER && el("walletAddressInput"))
+            el("walletAddressInput").value = json.wallet || "";
+        await loadAdminBootstrap();
+    }
+    else {
+        applyTab("dashboard");
+    }
+}
+async function loadAdminBootstrap() {
+    var _a, _b;
+    const { json } = await adminApi("/api/admin/bootstrap", {});
+    if (!(json === null || json === void 0 ? void 0 : json.ok))
+        return;
+    if (el("adminPrompt"))
+        el("adminPrompt").value = json.prompt || "";
+    if (el("stylePromptJson"))
+        el("stylePromptJson").value = JSON.stringify(json.stylePrompts || {}, null, 2);
+    if (el("customPromptsJson"))
+        el("customPromptsJson").value = JSON.stringify(json.customPrompts || [], null, 2);
+    if (el("freeDailyLimit"))
+        el("freeDailyLimit").value = String((_a = json.freeDailyLimit) !== null && _a !== void 0 ? _a : "");
+    if (el("basePoints"))
+        el("basePoints").value = String((_b = json.basePoints) !== null && _b !== void 0 ? _b : "");
+    if (el("offerBannerInput"))
+        el("offerBannerInput").value = json.offerBanner || "";
+    if (el("offerBannerImageUrlInput"))
+        el("offerBannerImageUrlInput").value = json.offerBannerImage || "";
+    if (el("welcomeBotInput"))
+        el("welcomeBotInput").value = json.welcomeBot || "";
+    if (el("welcomeMiniappInput"))
+        el("welcomeMiniappInput").value = json.welcomeMiniapp || "";
+    if (json.adminFlags) {
+        if (el("flagCapitalMode"))
+            el("flagCapitalMode").checked = !!json.adminFlags.capitalModeEnabled;
+        if (el("flagProfileTips"))
+            el("flagProfileTips").checked = !!json.adminFlags.profileTipsEnabled;
+    }
+    renderStyleList(json.styles || []);
+    renderCommissionList(json.commission || {});
+    renderPayments(json.payments || []);
+    renderTickets(json.tickets || []);
+    renderWithdrawals(json.withdrawals || []);
+    if (offerText)
+        offerText.textContent = json.offerBanner || (offerText.textContent || "");
+    if (offerImage) {
+        const img = String(json.offerBannerImage || "").trim();
+        offerImage.style.display = img ? "block" : "none";
+        if (img)
+            offerImage.src = img;
+    }
+    // load prompt requests
+    if (el("promptReqSelect"))
+        await refreshPromptReqs();
+}
 setupTabs();
 applyTab("dashboard");
-
 el("q").addEventListener("input", (e) => filterSymbols(e.target.value));
-el("symbol")?.addEventListener("change", () => { refreshLiveQuote(true); refreshSymbolNews(true); refreshNewsAnalysis(true); });
-el("timeframe")?.addEventListener("change", () => refreshLiveQuote(true));
-el("refreshNews")?.addEventListener("click", () => { refreshSymbolNews(true); refreshNewsAnalysis(true); });
+(_b = el("symbol")) === null || _b === void 0 ? void 0 : _b.addEventListener("change", () => { refreshLiveQuote(true); refreshSymbolNews(true); refreshNewsAnalysis(true); });
+(_c = el("timeframe")) === null || _c === void 0 ? void 0 : _c.addEventListener("change", () => refreshLiveQuote(true));
+(_d = el("refreshNews")) === null || _d === void 0 ? void 0 : _d.addEventListener("click", () => { refreshSymbolNews(true); refreshNewsAnalysis(true); });
 el("tfChips").addEventListener("click", (e) => {
-  const chip = e.target?.closest?.(".chip");
-  const tf = chip?.dataset?.tf;
-  if (!tf) return;
-  setTf(tf);
-  refreshLiveQuote(true);
+    var _a, _b, _c;
+    const chip = (_b = (_a = e.target) === null || _a === void 0 ? void 0 : _a.closest) === null || _b === void 0 ? void 0 : _b.call(_a, ".chip");
+    const tf = (_c = chip === null || chip === void 0 ? void 0 : chip.dataset) === null || _c === void 0 ? void 0 : _c.tf;
+    if (!tf)
+        return;
+    setTf(tf);
+    refreshLiveQuote(true);
 });
-
 el("save").addEventListener("click", async () => {
-  if (OFFLINE_MODE || IS_GUEST) {
-    showToast("محدود", "در حالت آفلاین/مهمان ذخیره روی سرور ممکن نیست.", "SET", false);
-    return;
-  }
-  showToast("در حال ذخیره…", "تنظیمات ذخیره می‌شود", "SET", true);
-  out.textContent = "⏳ ذخیره تنظیمات…";
-
-  const payload = buildAuthBody({
-    timeframe: val("timeframe"),
-    style: val("style"),
-    risk: val("risk"),
-    newsEnabled: val("newsEnabled") === "true",
-    promptMode: val("promptMode") || "style_plus_custom",
-    selectedSymbol: val("symbol") || "",
-    customPromptId: val("customPrompt") || "",
-  };
-
-  const {status, json} = await api("/api/settings", payload);
-  if (!json?.ok) {
-    out.textContent = "⚠️ خطا: " + prettyErr(json, status);
-    showToast("خطا", prettyErr(json, status), "SET", false);
-    return;
-  }
-
-  out.textContent = "✅ تنظیمات ذخیره شد.";
-  updateMeta(json.state, json.quota);
-  showToast("ذخیره شد ✅", "تنظیمات اعمال شد", "OK", false);
-  setTimeout(hideToast, 1200);
-});
-
-el("analyze").addEventListener("click", async () => {
-  if (OFFLINE_MODE || IS_GUEST) {
-    const symbol = val("symbol") || "";
-    const cached = readByKey(LOCAL_KEYS.analyzeCache, analyzeCacheKey(symbol));
-    if (cached?.result) {
-      out.textContent = cached.result;
-      if (cached?.zonesSvg) renderChartFallbackSvg(cached.zonesSvg);
-      showToast("آفلاین", "آخرین تحلیل ذخیره‌شده نمایش داده شد.", "AI", false);
-    } else {
-      out.textContent = "⚠️ تحلیل آنلاین در حالت آفلاین/مهمان غیرفعال است. برای ادامه از داخل تلگرام متصل شوید.";
-      showToast("محدود", "تحلیل نیاز به اتصال و احراز تلگرام دارد.", "AI", false);
+    if (OFFLINE_MODE || IS_GUEST) {
+        showToast("\u0645\u062D\u062F\u0648\u062F", "\u062F\u0631 \u062D\u0627\u0644\u062A \u0622\u0641\u0644\u0627\u06CC\u0646/\u0645\u0647\u0645\u0627\u0646 \u0630\u062E\u06CC\u0631\u0647 \u0631\u0648\u06CC \u0633\u0631\u0648\u0631 \u0645\u0645\u06A9\u0646 \u0646\u06CC\u0633\u062A.", "SET", false);
+        return;
     }
-    return;
-  }
-  showToast("در حال تحلیل…", "جمع‌آوری دیتا + تولید خروجی", "AI", true);
-  out.textContent = "⏳ در حال تحلیل…";
-
-  const payload = buildAuthBody({ symbol: val("symbol"), userPrompt: "" });
-
-  const {status, json} = await api("/api/analyze", payload);
-  if (!json?.ok) {
-    const msg = prettyErr(json, status);
-    out.textContent = "⚠️ " + msg;
-    showToast("خطا", msg, status === 429 ? "Quota" : "AI", false);
-    return;
-  }
-
-  out.textContent = json.result || "⚠️ بدون خروجی";
-  cacheByKey(LOCAL_KEYS.analyzeCache, analyzeCacheKey(val("symbol") || ""), {
-    result: json.result || "",
-    chartUrl: json.chartUrl || "",
-    zonesSvg: json.zonesSvg || "",
-    state: json.state || {},
-    quota: json.quota || "",
-  });
-  await refreshLiveQuote(true);
-  await refreshSymbolNews(true);
-  // Render chart if available
-  const chartCard = el("chartCard");
-  const chartImg = el("chartImg");
-  if (chartCard && chartImg) {
-    const u = json.chartUrl || "";
-    const fallbackSvg = json.zonesSvg || "";
-    const tf = json?.quickchartConfig?.timeframe || val("timeframe") || "H4";
-    const zones = Array.isArray(json?.levels) ? json.levels.length : 0;
-    const candleCount = Number(json?.chartMeta?.candles || 0);
-    const cm = el("chartMeta");
-    if (u) {
-      chartImg.onerror = () => {
-        chartImg.onerror = null;
-        if (fallbackSvg) {
-          renderChartFallbackSvg(fallbackSvg);
-          const cmFallback = el("chartMeta");
-          if (cmFallback) cmFallback.textContent = "Zones SVG | TF: " + tf + " | zones: " + zones;
-          return;
-        }
-        chartImg.removeAttribute("src");
-        chartCard.style.display = "none";
-      };
-      chartImg.src = u;
-      chartCard.style.display = "block";
-      if (cm) cm.textContent = "Candlestick | TF: " + tf + " | candles: " + candleCount + " | zones: " + zones;
-    } else if (fallbackSvg) {
-      renderChartFallbackSvg(fallbackSvg);
-      if (cm) cm.textContent = "Zones SVG | TF: " + tf + " | zones: " + zones;
-    } else {
-      chartImg.removeAttribute("src");
-      chartCard.style.display = "none";
-    }
-  }
-  updateMeta(json.state, json.quota);
-  showToast("آماده ✅", "خروجی دریافت شد", "OK", false);
-  setTimeout(hideToast, 1200);
-});
-
-el("sendSupportTicket")?.addEventListener("click", async () => {
-  if (OFFLINE_MODE || IS_GUEST) {
-    showToast("محدود", "ارسال تیکت در حالت آفلاین/مهمان ممکن نیست.", "SUP", false);
-    return;
-  }
-  const text = (el("supportTicketText")?.value || "").trim();
-  if (!text || text.length < 4) {
-    showToast("خطا", "متن تیکت خیلی کوتاه است.", "SUP", false);
-    return;
-  }
-  if (text.length > 300) {
-    showToast("خطا", "حداکثر ۳۰۰ کاراکتر مجاز است.", "SUP", false);
-    return;
-  }
-  showToast("در حال ارسال…", "تیکت در حال ثبت است", "SUP", true);
-  const { status, json } = await api("/api/support/ticket", buildAuthBody({ text }));
-  if (!json?.ok) {
-    const msg = json?.error === "support_unavailable"
-      ? "پشتیبانی در دسترس نیست."
-      : "ارسال تیکت ناموفق بود.";
-    showToast("خطا", msg, "SUP", false);
-    return;
-  }
-  if (el("supportTicketText")) el("supportTicketText").value = "";
-  showToast("ارسال شد ✅", "تیکت شما ثبت شد", "SUP", false);
-  setTimeout(hideToast, 1200);
-});
-
-el("close").addEventListener("click", () => tg?.close());
-
-el("savePrompt")?.addEventListener("click", async () => {
-  const prompt = el("adminPrompt")?.value || "";
-  const { json } = await adminApi("/api/admin/prompt", { prompt });
-  if (json?.ok) showToast("ذخیره شد ✅", "پرامپت بروزرسانی شد", "ADM", false);
-});
-
-el("saveStylePrompts")?.addEventListener("click", async () => {
-  const raw = el("stylePromptJson")?.value || "{}";
-  const stylePrompts = safeJsonParse(raw, {});
-  const { json } = await adminApi("/api/admin/style-prompts", { stylePrompts });
-  if (json?.ok) showToast("ذخیره شد ✅", "JSON سبک‌ها بروزرسانی شد", "ADM", false);
-});
-
-el("addStyle")?.addEventListener("click", async () => {
-  const style = el("newStyle")?.value || "";
-  const { json } = await adminApi("/api/admin/styles", { action: "add", style });
-  if (json?.ok) {
-    renderStyleList(json.styles || []);
-    fillStyles(json.styles || []);
-  }
-});
-
-el("removeStyle")?.addEventListener("click", async () => {
-  const style = el("removeStyleName")?.value || "";
-  const { json } = await adminApi("/api/admin/styles", { action: "remove", style });
-  if (json?.ok) {
-    renderStyleList(json.styles || []);
-    fillStyles(json.styles || []);
-  }
-});
-
-el("saveGlobalCommission")?.addEventListener("click", async () => {
-  const percent = Number(el("globalCommission")?.value || 0);
-  const { json } = await adminApi("/api/admin/commissions", { action: "setGlobal", percent });
-  if (json?.ok) renderCommissionList(json.commission || {});
-});
-
-el("saveUserCommission")?.addEventListener("click", async () => {
-  const username = el("commissionUser")?.value || "";
-  const percent = Number(el("commissionPercent")?.value || 0);
-  const { json } = await adminApi("/api/admin/commissions", { action: "setOverride", username, percent });
-  if (json?.ok) renderCommissionList(json.commission || {});
-});
-
-el("saveFreeLimit")?.addEventListener("click", async () => {
-  const limit = Number(el("freeDailyLimit")?.value || 3);
-  const { json } = await adminApi("/api/admin/free-limit", { limit });
-  if (json?.ok) showToast("ذخیره شد ✅", "سهمیه رایگان بروزرسانی شد", "ADM", false);
-});
-
-
-el("saveOfferBanner")?.addEventListener("click", async () => {
-  const offerBanner = el("offerBannerInput")?.value || "";
-  let offerBannerImage = undefined;
-  const file = el("offerImageFile")?.files?.[0];
-  const imageUrl = String(el("offerBannerImageUrlInput")?.value || "").trim();
-  if (file) {
-    offerBannerImage = await fileToDataUrl(file);
-  } else if (imageUrl) {
-    offerBannerImage = imageUrl;
-  }
-  const { json } = await adminApi("/api/admin/offer", { offerBanner, offerBannerImage });
-  if (json?.ok) {
-    if (offerText) offerText.textContent = json.offerBanner || offerBanner;
-    if (offerImage) {
-      const img = String(json.offerBannerImage || "").trim();
-      offerImage.style.display = img ? "block" : "none";
-      if (img) offerImage.src = img;
-    }
-    showToast("ذخیره شد ✅", "بنر بروزرسانی شد", "ADM", false);
-    setTimeout(hideToast, 1200);
-  } else {
-    showToast("خطا", "ذخیره بنر ناموفق بود", "ADM", false);
-  }
-});
-
-el("offerImageFile")?.addEventListener("change", async (ev) => {
-  const file = ev?.target?.files?.[0];
-  if (!file) return;
-  if (file.size > 1024 * 1024) {
-    showToast("خطا", "حجم تصویر باید کمتر از 1MB باشد", "ADM", false);
-    return;
-  }
-  const reader = new FileReader();
-  reader.onload = () => {
-    const dataUrl = typeof reader.result === "string" ? reader.result : "";
-    if (el("offerBannerImageUrlInput")) el("offerBannerImageUrlInput").value = dataUrl;
-    if (offerImg) offerImg.src = dataUrl;
-    if (offerMedia) offerMedia.classList.toggle("show", !!dataUrl);
-  };
-  reader.readAsDataURL(file);
-});
-
-el("clearOfferImage")?.addEventListener("click", async () => {
-  const offerBanner = el("offerBannerInput")?.value || "";
-  const { json } = await adminApi("/api/admin/offer", { offerBanner, clearOfferBannerImage: true });
-  if (el("offerBannerImageUrlInput")) el("offerBannerImageUrlInput").value = "";
-  if (el("offerImageFile")) el("offerImageFile").value = "";
-  if (offerImg) offerImg.src = "";
-  if (offerMedia) offerMedia.classList.remove("show");
-  if (json?.ok) showToast("انجام شد ✅", "تصویر بنر حذف شد", "ADM", false);
-});
-
-el("saveWelcomeTexts")?.addEventListener("click", async () => {
-  const welcomeBot = el("welcomeBotInput")?.value || "";
-  const welcomeMiniapp = el("welcomeMiniappInput")?.value || "";
-  const { json } = await adminApi("/api/admin/welcome", { welcomeBot, welcomeMiniapp });
-  if (json?.ok) {
-    if (el("welcomeBotInput")) el("welcomeBotInput").value = json.welcomeBot || welcomeBot;
-    if (el("welcomeMiniappInput")) el("welcomeMiniappInput").value = json.welcomeMiniapp || welcomeMiniapp;
-    if (welcome) welcome.textContent = json.welcomeMiniapp || welcome.textContent;
-    showToast("ذخیره شد ✅", "متن خوش‌آمدگویی بروزرسانی شد", "ADM", false);
-    setTimeout(hideToast, 1200);
-  } else {
-    showToast("خطا", "ذخیره متن خوش‌آمدگویی ناموفق بود", "ADM", false);
-  }
-});
-
-el("saveFeatureFlags")?.addEventListener("click", async () => {
-  const capitalModeEnabled = !!el("flagCapitalMode")?.checked;
-  const profileTipsEnabled = !!el("flagProfileTips")?.checked;
-  const { json } = await adminApi("/api/admin/features", { capitalModeEnabled, profileTipsEnabled });
-  if (json?.ok) {
-    showToast("ذخیره شد ✅", "ویژگی‌ها بروزرسانی شد", "OWN", false);
-    setTimeout(hideToast, 1200);
-  } else {
-    showToast("خطا", "ذخیره ویژگی‌ها ناموفق بود", "OWN", false);
-  }
-});
-
-el("saveWallet")?.addEventListener("click", async () => {
-  const wallet = el("walletAddressInput")?.value || "";
-  const { json } = await adminApi("/api/admin/wallet", { wallet });
-  if (json?.ok) {
-    showToast("ذخیره شد ✅", "آدرس ولت بروزرسانی شد", "OWN", false);
-    setTimeout(hideToast, 1200);
-  } else {
-    showToast("خطا", "ذخیره آدرس ولت ناموفق بود", "OWN", false);
-  }
-});
-
-el("refreshTickets")?.addEventListener("click", async () => {
-  showToast("در حال دریافت…", "لیست تیکت‌ها", "TICKET", true);
-  await refreshTickets();
-  showToast("آماده ✅", "تیکت‌ها بروزرسانی شد", "TICKET", false);
-  setTimeout(hideToast, 1000);
-});
-
-el("updateTicket")?.addEventListener("click", async () => {
-  const id = el("ticketSelect")?.value || "";
-  const status = el("ticketStatus")?.value || "pending";
-  const reply = (el("ticketReply")?.value || "").trim();
-  if (!id) { showToast("خطا", "یک تیکت انتخاب کنید.", "TICKET", false); return; }
-  showToast("در حال ثبت…", "بروزرسانی تیکت", "TICKET", true);
-  const { json } = await adminApi("/api/admin/tickets/update", { id, status, reply });
-  if (json?.ok) {
-    if (el("ticketReply")) el("ticketReply").value = "";
-    await refreshTickets();
-    showToast("ثبت شد ✅", "تیکت بروزرسانی شد", "TICKET", false);
-    setTimeout(hideToast, 1200);
-  } else {
-    showToast("خطا", "ثبت تیکت ناموفق بود", "TICKET", false);
-  }
-});
-
-el("ticketSelect")?.addEventListener("change", () => {
-  const id = el("ticketSelect")?.value || "";
-  const t = ADMIN_TICKETS.find((x) => x.id === id);
-  if (t && el("ticketStatus")) el("ticketStatus").value = t.status || "pending";
-});
-
-el("ticketReplyTemplate")?.addEventListener("change", pickTicketReplyTemplate);
-el("ticketQuickPending")?.addEventListener("click", () => applyTicketFilter("pending"));
-el("ticketQuickAnswered")?.addEventListener("click", () => applyTicketFilter("answered"));
-
-el("refreshWithdrawals")?.addEventListener("click", async () => {
-  showToast("در حال دریافت…", "لیست برداشت‌ها", "WD", true);
-  await refreshWithdrawals();
-  showToast("آماده ✅", "برداشت‌ها بروزرسانی شد", "WD", false);
-  setTimeout(hideToast, 1000);
-});
-
-el("reviewWithdrawalBtn")?.addEventListener("click", async () => {
-  const id = el("withdrawSelect")?.value || "";
-  const decision = el("withdrawDecision")?.value || "rejected";
-  const txHash = (el("withdrawTxHash")?.value || "").trim();
-  if (!id) { showToast("خطا", "یک برداشت انتخاب کنید.", "WD", false); return; }
-  showToast("در حال ثبت…", "بررسی برداشت", "WD", true);
-  const { json } = await adminApi("/api/admin/withdrawals/review", { id, decision, txHash });
-  if (json?.ok) {
-    if (el("withdrawTxHash")) el("withdrawTxHash").value = "";
-    await refreshWithdrawals();
-    showToast("ثبت شد ✅", "برداشت بروزرسانی شد", "WD", false);
-    setTimeout(hideToast, 1200);
-  } else {
-    showToast("خطا", "ثبت برداشت ناموفق بود", "WD", false);
-  }
-});
-
-el("refreshPromptReqs")?.addEventListener("click", async () => {
-  showToast("در حال دریافت…", "درخواست‌های پرامپت", "PR", true);
-  await refreshPromptReqs();
-  showToast("آماده ✅", "لیست بروزرسانی شد", "PR", false);
-  setTimeout(hideToast, 1000);
-});
-
-el("decidePromptReqBtn")?.addEventListener("click", async () => {
-  const requestId = el("promptReqSelect")?.value || "";
-  const status = el("promptReqDecision")?.value || "rejected";
-  const promptId = (el("promptReqPromptId")?.value || "").trim();
-  if (!requestId) { showToast("خطا", "یک درخواست را انتخاب کنید.", "PR", false); return; }
-  if (status === "approved" && !promptId) {
-    showToast("خطا", "برای تایید باید Prompt ID وارد کنید.", "PR", false);
-    return;
-  }
-  showToast("در حال ثبت…", "بررسی درخواست", "PR", true);
-  const { json } = await adminApi("/api/admin/custom-prompts/requests", { action: "decide", requestId, status, promptId });
-  if (json?.ok) {
-    await refreshPromptReqs();
-    showToast("ثبت شد ✅", "درخواست بروزرسانی شد", "PR", false);
-    setTimeout(hideToast, 1200);
-  } else {
-    showToast("خطا", "ثبت درخواست ناموفق بود", "PR", false);
-  }
-});
-
-el("promptReqSelect")?.addEventListener("change", () => {
-  const id = el("promptReqSelect")?.value || "";
-  const r = ADMIN_PROMPT_REQS.find((x) => x.id === id);
-  if (r && el("promptReqPromptId")) el("promptReqPromptId").value = r.promptId || "";
-  if (r && el("promptReqDecision")) el("promptReqDecision").value = (r.status === "approved" ? "approved" : (r.status === "rejected" ? "rejected" : "rejected"));
-});
-
-el("saveCapitalToggle")?.addEventListener("click", async () => {
-  const username = (el("capitalToggleUser")?.value || "").trim();
-  const enabled = (el("capitalToggleEnabled")?.value || "true") === "true";
-  if (!username) { showToast("خطا", "یوزرنیم را وارد کنید.", "CAP", false); return; }
-  const { json } = await adminApi("/api/admin/capital/toggle", { username, enabled });
-  if (json?.ok) {
-    showToast("ثبت شد ✅", "تنظیم سرمایه بروزرسانی شد", "CAP", false);
-    setTimeout(hideToast, 1200);
-  } else {
-    showToast("خطا", "ثبت ناموفق بود", "CAP", false);
-  }
-});
-
-
-el("customPromptsJsonFile")?.addEventListener("change", async (ev) => {
-  const file = ev?.target?.files?.[0];
-  if (!file) return;
-  try {
-    const txt = await file.text();
-    const parsed = safeJsonParse(txt, null);
-    if (!Array.isArray(parsed)) {
-      showToast("خطا", "فایل JSON باید آرایه باشد", "ADM", false);
-      return;
-    }
-    if (el("customPromptsJson")) el("customPromptsJson").value = JSON.stringify(parsed, null, 2);
-    showToast("بارگذاری شد ✅", "JSON پرامپت آماده ذخیره است", "ADM", false);
-  } catch {
-    showToast("خطا", "خواندن فایل JSON ناموفق بود", "ADM", false);
-  }
-});
-
-el("saveCustomPrompts")?.addEventListener("click", async () => {
-  const raw = el("customPromptsJson")?.value || "[]";
-  const customPrompts = safeJsonParse(raw, []);
-  const { json } = await adminApi("/api/admin/custom-prompts", { customPrompts });
-  if (json?.ok) {
-    showToast("ذخیره شد ✅", "پرامپت‌های اختصاصی بروزرسانی شد", "ADM", false);
-    fillCustomPrompts(json.customPrompts || []);
-  }
-});
-
-el("sendCustomPrompt")?.addEventListener("click", async () => {
-  const username = el("customPromptUser")?.value || "";
-  const promptId = el("customPromptId")?.value || "";
-  const { json } = await adminApi("/api/admin/custom-prompts/send", { username, promptId });
-  if (json?.ok) showToast("ارسال شد ✅", "پرامپت برای کاربر ارسال شد", "ADM", false);
-});
-
-el("approvePayment")?.addEventListener("click", async () => {
-  const payload = {
-    username: (el("payUsername")?.value || "").trim(),
-    amount: Number(el("payAmount")?.value || 0),
-    days: Number(el("payDays")?.value || 30),
-    txHash: (el("payTx")?.value || "").trim(),
-  };
-  if (!payload.username || !Number.isFinite(payload.amount) || payload.amount <= 0) {
-    showToast("خطا", "یوزرنیم و مبلغ معتبر را وارد کنید.", "PAY", false);
-    return;
-  }
-  if (!Number.isFinite(payload.days) || payload.days <= 0) payload.days = 30;
-  const { json } = await adminApi("/api/admin/payments/approve", payload);
-  if (json?.ok) {
-    showToast("پرداخت تایید شد ✅", "اشتراک فعال شد", "PAY", false);
-    renderPayments([json.payment].filter(Boolean));
-  } else {
-    showToast("خطا", "تایید پرداخت ناموفق بود", "PAY", false);
-  }
-});
-
-el("checkPayment")?.addEventListener("click", async () => {
-  const payload = {
-    txHash: el("payTx")?.value || "",
-    amount: Number(el("payAmount")?.value || 0),
-    address: "",
-  };
-  const { json } = await adminApi("/api/admin/payments/check", payload);
-  if (json?.ok) showToast("نتیجه بلاک‌چین", JSON.stringify(json.result || {}), "CHAIN", false);
-});
-
-el("activateSubscription")?.addEventListener("click", async () => {
-  const payload = {
-    username: el("payUsername")?.value || "",
-    days: Number(el("payDays")?.value || 30),
-    dailyLimit: Number(el("payDailyLimit")?.value || 50),
-  };
-  const { json } = await adminApi("/api/admin/subscription/activate", payload);
-  if (json?.ok) showToast("اشتراک فعال شد ✅", "فعال‌سازی دستی انجام شد", "ADM", false);
-});
-
-el("loadUsers")?.addEventListener("click", async () => {
-  const [{ json: usersJson }, { json: bootJson }] = await Promise.all([
-    adminApi("/api/admin/users", { limit: 200 }),
-    adminApi("/api/admin/bootstrap", {}),
-  ]);
-  if (usersJson?.ok && bootJson?.ok) {
-    renderFullAdminReport(usersJson.users || [], bootJson.payments || [], bootJson.withdrawals || [], bootJson.tickets || []);
-  } else if (usersJson?.ok) {
-    renderUsers(usersJson.users || []);
-  }
-});
-
-el("downloadReportPdf")?.addEventListener("click", async () => {
-  try {
-    showToast("در حال ساخت PDF…", "گزارش کامل", "PDF", true);
-    const r = await fetch(API_BASE + "/api/admin/report/pdf", {      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ initData: INIT_DATA, limit: 250 }),
+    showToast("\u062F\u0631 \u062D\u0627\u0644 \u0630\u062E\u06CC\u0631\u0647\u2026", "\u062A\u0646\u0638\u06CC\u0645\u0627\u062A \u0630\u062E\u06CC\u0631\u0647 \u0645\u06CC\u200C\u0634\u0648\u062F", "SET", true);
+    out.textContent = "\u23F3 \u0630\u062E\u06CC\u0631\u0647 \u062A\u0646\u0638\u06CC\u0645\u0627\u062A\u2026";
+    const payload = buildAuthBody({
+        timeframe: val("timeframe"),
+        style: val("style"),
+        risk: val("risk"),
+        newsEnabled: val("newsEnabled") === "true",
+        promptMode: val("promptMode") || "style_plus_custom",
+        selectedSymbol: val("symbol") || "",
+        customPromptId: val("customPrompt") || "",
     });
-    if (!r.ok) throw new Error("http_" + r.status);
-    const blob = await r.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "admin-report-" + Date.now() + ".pdf";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    showToast("دانلود شد ✅", "گزارش PDF آماده است", "PDF", false);
+    const { status, json } = await api("/api/settings", payload);
+    if (!(json === null || json === void 0 ? void 0 : json.ok)) {
+        out.textContent = "\u26A0\uFE0F \u062E\u0637\u0627: " + prettyErr(json, status);
+        showToast("\u062E\u0637\u0627", prettyErr(json, status), "SET", false);
+        return;
+    }
+    out.textContent = "\u2705 \u062A\u0646\u0638\u06CC\u0645\u0627\u062A \u0630\u062E\u06CC\u0631\u0647 \u0634\u062F.";
+    updateMeta(json.state, json.quota);
+    showToast("\u0630\u062E\u06CC\u0631\u0647 \u0634\u062F \u2705", "\u062A\u0646\u0638\u06CC\u0645\u0627\u062A \u0627\u0639\u0645\u0627\u0644 \u0634\u062F", "OK", false);
     setTimeout(hideToast, 1200);
-  } catch (e) {
-    showToast("خطا", "ساخت PDF ناموفق بود", "PDF", false);
-  }
 });
-
-
-el("reconnect")?.addEventListener("click", async () => {
-  OFFLINE_MODE = false;
-  await boot();
+el("analyze").addEventListener("click", async () => {
+    var _a, _b;
+    if (OFFLINE_MODE || IS_GUEST) {
+        const symbol = val("symbol") || "";
+        const cached = readByKey(LOCAL_KEYS.analyzeCache, analyzeCacheKey(symbol));
+        if (cached === null || cached === void 0 ? void 0 : cached.result) {
+            out.textContent = cached.result;
+            if (cached === null || cached === void 0 ? void 0 : cached.zonesSvg)
+                renderChartFallbackSvg(cached.zonesSvg);
+            showToast("\u0622\u0641\u0644\u0627\u06CC\u0646", "\u0622\u062E\u0631\u06CC\u0646 \u062A\u062D\u0644\u06CC\u0644 \u0630\u062E\u06CC\u0631\u0647\u200C\u0634\u062F\u0647 \u0646\u0645\u0627\u06CC\u0634 \u062F\u0627\u062F\u0647 \u0634\u062F.", "AI", false);
+        }
+        else {
+            out.textContent = "\u26A0\uFE0F \u062A\u062D\u0644\u06CC\u0644 \u0622\u0646\u0644\u0627\u06CC\u0646 \u062F\u0631 \u062D\u0627\u0644\u062A \u0622\u0641\u0644\u0627\u06CC\u0646/\u0645\u0647\u0645\u0627\u0646 \u063A\u06CC\u0631\u0641\u0639\u0627\u0644 \u0627\u0633\u062A. \u0628\u0631\u0627\u06CC \u0627\u062F\u0627\u0645\u0647 \u0627\u0632 \u062F\u0627\u062E\u0644 \u062A\u0644\u06AF\u0631\u0627\u0645 \u0645\u062A\u0635\u0644 \u0634\u0648\u06CC\u062F.";
+            showToast("\u0645\u062D\u062F\u0648\u062F", "\u062A\u062D\u0644\u06CC\u0644 \u0646\u06CC\u0627\u0632 \u0628\u0647 \u0627\u062A\u0635\u0627\u0644 \u0648 \u0627\u062D\u0631\u0627\u0632 \u062A\u0644\u06AF\u0631\u0627\u0645 \u062F\u0627\u0631\u062F.", "AI", false);
+        }
+        return;
+    }
+    showToast("\u062F\u0631 \u062D\u0627\u0644 \u062A\u062D\u0644\u06CC\u0644\u2026", "\u062C\u0645\u0639\u200C\u0622\u0648\u0631\u06CC \u062F\u06CC\u062A\u0627 + \u062A\u0648\u0644\u06CC\u062F \u062E\u0631\u0648\u062C\u06CC", "AI", true);
+    out.textContent = "\u23F3 \u062F\u0631 \u062D\u0627\u0644 \u062A\u062D\u0644\u06CC\u0644\u2026";
+    const payload = buildAuthBody({ symbol: val("symbol"), userPrompt: "" });
+    const { status, json } = await api("/api/analyze", payload);
+    if (!(json === null || json === void 0 ? void 0 : json.ok)) {
+        const msg = prettyErr(json, status);
+        out.textContent = "\u26A0\uFE0F " + msg;
+        showToast("\u062E\u0637\u0627", msg, status === 429 ? "Quota" : "AI", false);
+        return;
+    }
+    out.textContent = json.result || "\u26A0\uFE0F \u0628\u062F\u0648\u0646 \u062E\u0631\u0648\u062C\u06CC";
+    cacheByKey(LOCAL_KEYS.analyzeCache, analyzeCacheKey(val("symbol") || ""), {
+        result: json.result || "",
+        chartUrl: json.chartUrl || "",
+        zonesSvg: json.zonesSvg || "",
+        state: json.state || {},
+        quota: json.quota || "",
+    });
+    await refreshLiveQuote(true);
+    await refreshSymbolNews(true);
+    // Render chart if available
+    const chartCard = el("chartCard");
+    const chartImg = el("chartImg");
+    if (chartCard && chartImg) {
+        const u = json.chartUrl || "";
+        const fallbackSvg = json.zonesSvg || "";
+        const tf = ((_a = json === null || json === void 0 ? void 0 : json.quickchartConfig) === null || _a === void 0 ? void 0 : _a.timeframe) || val("timeframe") || "H4";
+        const zones = Array.isArray(json === null || json === void 0 ? void 0 : json.levels) ? json.levels.length : 0;
+        const candleCount = Number(((_b = json === null || json === void 0 ? void 0 : json.chartMeta) === null || _b === void 0 ? void 0 : _b.candles) || 0);
+        const cm = el("chartMeta");
+        if (u) {
+            chartImg.onerror = () => {
+                chartImg.onerror = null;
+                if (fallbackSvg) {
+                    renderChartFallbackSvg(fallbackSvg);
+                    const cmFallback = el("chartMeta");
+                    if (cmFallback)
+                        cmFallback.textContent = "Zones SVG | TF: " + tf + " | zones: " + zones;
+                    return;
+                }
+                chartImg.removeAttribute("src");
+                chartCard.style.display = "none";
+            };
+            chartImg.src = u;
+            chartCard.style.display = "block";
+            if (cm)
+                cm.textContent = "Candlestick | TF: " + tf + " | candles: " + candleCount + " | zones: " + zones;
+        }
+        else if (fallbackSvg) {
+            renderChartFallbackSvg(fallbackSvg);
+            if (cm)
+                cm.textContent = "Zones SVG | TF: " + tf + " | zones: " + zones;
+        }
+        else {
+            chartImg.removeAttribute("src");
+            chartCard.style.display = "none";
+        }
+    }
+    updateMeta(json.state, json.quota);
+    showToast("\u0622\u0645\u0627\u062F\u0647 \u2705", "\u062E\u0631\u0648\u062C\u06CC \u062F\u0631\u06CC\u0627\u0641\u062A \u0634\u062F", "OK", false);
+    setTimeout(hideToast, 1200);
 });
-
+(_e = el("sendSupportTicket")) === null || _e === void 0 ? void 0 : _e.addEventListener("click", async () => {
+    var _a;
+    if (OFFLINE_MODE || IS_GUEST) {
+        showToast("\u0645\u062D\u062F\u0648\u062F", "\u0627\u0631\u0633\u0627\u0644 \u062A\u06CC\u06A9\u062A \u062F\u0631 \u062D\u0627\u0644\u062A \u0622\u0641\u0644\u0627\u06CC\u0646/\u0645\u0647\u0645\u0627\u0646 \u0645\u0645\u06A9\u0646 \u0646\u06CC\u0633\u062A.", "SUP", false);
+        return;
+    }
+    const text = (((_a = el("supportTicketText")) === null || _a === void 0 ? void 0 : _a.value) || "").trim();
+    if (!text || text.length < 4) {
+        showToast("\u062E\u0637\u0627", "\u0645\u062A\u0646 \u062A\u06CC\u06A9\u062A \u062E\u06CC\u0644\u06CC \u06A9\u0648\u062A\u0627\u0647 \u0627\u0633\u062A.", "SUP", false);
+        return;
+    }
+    if (text.length > 300) {
+        showToast("\u062E\u0637\u0627", "\u062D\u062F\u0627\u06A9\u062B\u0631 \u06F3\u06F0\u06F0 \u06A9\u0627\u0631\u0627\u06A9\u062A\u0631 \u0645\u062C\u0627\u0632 \u0627\u0633\u062A.", "SUP", false);
+        return;
+    }
+    showToast("\u062F\u0631 \u062D\u0627\u0644 \u0627\u0631\u0633\u0627\u0644\u2026", "\u062A\u06CC\u06A9\u062A \u062F\u0631 \u062D\u0627\u0644 \u062B\u0628\u062A \u0627\u0633\u062A", "SUP", true);
+    const { status, json } = await api("/api/support/ticket", buildAuthBody({ text }));
+    if (!(json === null || json === void 0 ? void 0 : json.ok)) {
+        const msg = (json === null || json === void 0 ? void 0 : json.error) === "support_unavailable"
+            ? "\u067E\u0634\u062A\u06CC\u0628\u0627\u0646\u06CC \u062F\u0631 \u062F\u0633\u062A\u0631\u0633 \u0646\u06CC\u0633\u062A."
+            : "\u0627\u0631\u0633\u0627\u0644 \u062A\u06CC\u06A9\u062A \u0646\u0627\u0645\u0648\u0641\u0642 \u0628\u0648\u062F.";
+        showToast("\u062E\u0637\u0627", msg, "SUP", false);
+        return;
+    }
+    if (el("supportTicketText"))
+        el("supportTicketText").value = "";
+    showToast("\u0627\u0631\u0633\u0627\u0644 \u0634\u062F \u2705", "\u062A\u06CC\u06A9\u062A \u0634\u0645\u0627 \u062B\u0628\u062A \u0634\u062F", "SUP", false);
+    setTimeout(hideToast, 1200);
+});
+el("close").addEventListener("click", () => tg === null || tg === void 0 ? void 0 : tg.close());
+(_f = el("savePrompt")) === null || _f === void 0 ? void 0 : _f.addEventListener("click", async () => {
+    var _a;
+    const prompt = ((_a = el("adminPrompt")) === null || _a === void 0 ? void 0 : _a.value) || "";
+    const { json } = await adminApi("/api/admin/prompt", { prompt });
+    if (json === null || json === void 0 ? void 0 : json.ok)
+        showToast("\u0630\u062E\u06CC\u0631\u0647 \u0634\u062F \u2705", "\u067E\u0631\u0627\u0645\u067E\u062A \u0628\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06CC \u0634\u062F", "ADM", false);
+});
+(_g = el("saveStylePrompts")) === null || _g === void 0 ? void 0 : _g.addEventListener("click", async () => {
+    var _a;
+    const raw = ((_a = el("stylePromptJson")) === null || _a === void 0 ? void 0 : _a.value) || "{}";
+    const stylePrompts = safeJsonParse(raw, {});
+    const { json } = await adminApi("/api/admin/style-prompts", { stylePrompts });
+    if (json === null || json === void 0 ? void 0 : json.ok)
+        showToast("\u0630\u062E\u06CC\u0631\u0647 \u0634\u062F \u2705", "JSON \u0633\u0628\u06A9\u200C\u0647\u0627 \u0628\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06CC \u0634\u062F", "ADM", false);
+});
+(_h = el("addStyle")) === null || _h === void 0 ? void 0 : _h.addEventListener("click", async () => {
+    var _a;
+    const style = ((_a = el("newStyle")) === null || _a === void 0 ? void 0 : _a.value) || "";
+    const { json } = await adminApi("/api/admin/styles", { action: "add", style });
+    if (json === null || json === void 0 ? void 0 : json.ok) {
+        renderStyleList(json.styles || []);
+        fillStyles(json.styles || []);
+    }
+});
+(_j = el("removeStyle")) === null || _j === void 0 ? void 0 : _j.addEventListener("click", async () => {
+    var _a;
+    const style = ((_a = el("removeStyleName")) === null || _a === void 0 ? void 0 : _a.value) || "";
+    const { json } = await adminApi("/api/admin/styles", { action: "remove", style });
+    if (json === null || json === void 0 ? void 0 : json.ok) {
+        renderStyleList(json.styles || []);
+        fillStyles(json.styles || []);
+    }
+});
+(_k = el("saveGlobalCommission")) === null || _k === void 0 ? void 0 : _k.addEventListener("click", async () => {
+    var _a;
+    const percent = Number(((_a = el("globalCommission")) === null || _a === void 0 ? void 0 : _a.value) || 0);
+    const { json } = await adminApi("/api/admin/commissions", { action: "setGlobal", percent });
+    if (json === null || json === void 0 ? void 0 : json.ok)
+        renderCommissionList(json.commission || {});
+});
+(_l = el("saveUserCommission")) === null || _l === void 0 ? void 0 : _l.addEventListener("click", async () => {
+    var _a, _b;
+    const username = ((_a = el("commissionUser")) === null || _a === void 0 ? void 0 : _a.value) || "";
+    const percent = Number(((_b = el("commissionPercent")) === null || _b === void 0 ? void 0 : _b.value) || 0);
+    const { json } = await adminApi("/api/admin/commissions", { action: "setOverride", username, percent });
+    if (json === null || json === void 0 ? void 0 : json.ok)
+        renderCommissionList(json.commission || {});
+});
+(_m = el("saveFreeLimit")) === null || _m === void 0 ? void 0 : _m.addEventListener("click", async () => {
+    var _a;
+    const limit = Number(((_a = el("freeDailyLimit")) === null || _a === void 0 ? void 0 : _a.value) || 3);
+    const { json } = await adminApi("/api/admin/free-limit", { limit });
+    if (json === null || json === void 0 ? void 0 : json.ok)
+        showToast("\u0630\u062E\u06CC\u0631\u0647 \u0634\u062F \u2705", "\u0633\u0647\u0645\u06CC\u0647 \u0631\u0627\u06CC\u06AF\u0627\u0646 \u0628\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06CC \u0634\u062F", "ADM", false);
+});
+(_o = el("saveBasePoints")) === null || _o === void 0 ? void 0 : _o.addEventListener("click", async () => {
+    var _a;
+    const basePoints = Number(((_a = el("basePoints")) === null || _a === void 0 ? void 0 : _a.value) || 0);
+    const { json } = await adminApi("/api/admin/points/base", { basePoints });
+    if (json === null || json === void 0 ? void 0 : json.ok)
+        showToast("\u0630\u062E\u06CC\u0631\u0647 \u0634\u062F \u2705", "\u0627\u0645\u062A\u06CC\u0627\u0632 \u067E\u0627\u06CC\u0647 \u0628\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06CC \u0634\u062F", "ADM", false);
+});
+(_p = el("saveOfferBanner")) === null || _p === void 0 ? void 0 : _p.addEventListener("click", async () => {
+    var _a, _b, _c, _d;
+    const offerBanner = ((_a = el("offerBannerInput")) === null || _a === void 0 ? void 0 : _a.value) || "";
+    let offerBannerImage = undefined;
+    const file = (_c = (_b = el("offerImageFile")) === null || _b === void 0 ? void 0 : _b.files) === null || _c === void 0 ? void 0 : _c[0];
+    const imageUrl = String(((_d = el("offerBannerImageUrlInput")) === null || _d === void 0 ? void 0 : _d.value) || "").trim();
+    if (file) {
+        offerBannerImage = await fileToDataUrl(file);
+    }
+    else if (imageUrl) {
+        offerBannerImage = imageUrl;
+    }
+    const { json } = await adminApi("/api/admin/offer", { offerBanner, offerBannerImage });
+    if (json === null || json === void 0 ? void 0 : json.ok) {
+        if (offerText)
+            offerText.textContent = json.offerBanner || offerBanner;
+        if (offerImage) {
+            const img = String(json.offerBannerImage || "").trim();
+            offerImage.style.display = img ? "block" : "none";
+            if (img)
+                offerImage.src = img;
+        }
+        showToast("\u0630\u062E\u06CC\u0631\u0647 \u0634\u062F \u2705", "\u0628\u0646\u0631 \u0628\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06CC \u0634\u062F", "ADM", false);
+        setTimeout(hideToast, 1200);
+    }
+    else {
+        showToast("\u062E\u0637\u0627", "\u0630\u062E\u06CC\u0631\u0647 \u0628\u0646\u0631 \u0646\u0627\u0645\u0648\u0641\u0642 \u0628\u0648\u062F", "ADM", false);
+    }
+});
+(_q = el("offerImageFile")) === null || _q === void 0 ? void 0 : _q.addEventListener("change", async (ev) => {
+    var _a, _b;
+    const file = (_b = (_a = ev === null || ev === void 0 ? void 0 : ev.target) === null || _a === void 0 ? void 0 : _a.files) === null || _b === void 0 ? void 0 : _b[0];
+    if (!file)
+        return;
+    if (file.size > 1024 * 1024) {
+        showToast("\u062E\u0637\u0627", "\u062D\u062C\u0645 \u062A\u0635\u0648\u06CC\u0631 \u0628\u0627\u06CC\u062F \u06A9\u0645\u062A\u0631 \u0627\u0632 1MB \u0628\u0627\u0634\u062F", "ADM", false);
+        return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+        const dataUrl = typeof reader.result === "string" ? reader.result : "";
+        if (el("offerBannerImageUrlInput"))
+            el("offerBannerImageUrlInput").value = dataUrl;
+        if (offerImg)
+            offerImg.src = dataUrl;
+        if (offerMedia)
+            offerMedia.classList.toggle("show", !!dataUrl);
+    };
+    reader.readAsDataURL(file);
+});
+(_r = el("clearOfferImage")) === null || _r === void 0 ? void 0 : _r.addEventListener("click", async () => {
+    var _a;
+    const offerBanner = ((_a = el("offerBannerInput")) === null || _a === void 0 ? void 0 : _a.value) || "";
+    const { json } = await adminApi("/api/admin/offer", { offerBanner, clearOfferBannerImage: true });
+    if (el("offerBannerImageUrlInput"))
+        el("offerBannerImageUrlInput").value = "";
+    if (el("offerImageFile"))
+        el("offerImageFile").value = "";
+    if (offerImg)
+        offerImg.src = "";
+    if (offerMedia)
+        offerMedia.classList.remove("show");
+    if (json === null || json === void 0 ? void 0 : json.ok)
+        showToast("\u0627\u0646\u062C\u0627\u0645 \u0634\u062F \u2705", "\u062A\u0635\u0648\u06CC\u0631 \u0628\u0646\u0631 \u062D\u0630\u0641 \u0634\u062F", "ADM", false);
+});
+(_s = el("saveWelcomeTexts")) === null || _s === void 0 ? void 0 : _s.addEventListener("click", async () => {
+    var _a, _b;
+    const welcomeBot = ((_a = el("welcomeBotInput")) === null || _a === void 0 ? void 0 : _a.value) || "";
+    const welcomeMiniapp = ((_b = el("welcomeMiniappInput")) === null || _b === void 0 ? void 0 : _b.value) || "";
+    const { json } = await adminApi("/api/admin/welcome", { welcomeBot, welcomeMiniapp });
+    if (json === null || json === void 0 ? void 0 : json.ok) {
+        if (el("welcomeBotInput"))
+            el("welcomeBotInput").value = json.welcomeBot || welcomeBot;
+        if (el("welcomeMiniappInput"))
+            el("welcomeMiniappInput").value = json.welcomeMiniapp || welcomeMiniapp;
+        if (welcome)
+            welcome.textContent = json.welcomeMiniapp || welcome.textContent;
+        showToast("\u0630\u062E\u06CC\u0631\u0647 \u0634\u062F \u2705", "\u0645\u062A\u0646 \u062E\u0648\u0634\u200C\u0622\u0645\u062F\u06AF\u0648\u06CC\u06CC \u0628\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06CC \u0634\u062F", "ADM", false);
+        setTimeout(hideToast, 1200);
+    }
+    else {
+        showToast("\u062E\u0637\u0627", "\u0630\u062E\u06CC\u0631\u0647 \u0645\u062A\u0646 \u062E\u0648\u0634\u200C\u0622\u0645\u062F\u06AF\u0648\u06CC\u06CC \u0646\u0627\u0645\u0648\u0641\u0642 \u0628\u0648\u062F", "ADM", false);
+    }
+});
+(_t = el("saveFeatureFlags")) === null || _t === void 0 ? void 0 : _t.addEventListener("click", async () => {
+    var _a, _b;
+    const capitalModeEnabled = !!((_a = el("flagCapitalMode")) === null || _a === void 0 ? void 0 : _a.checked);
+    const profileTipsEnabled = !!((_b = el("flagProfileTips")) === null || _b === void 0 ? void 0 : _b.checked);
+    const { json } = await adminApi("/api/admin/features", { capitalModeEnabled, profileTipsEnabled });
+    if (json === null || json === void 0 ? void 0 : json.ok) {
+        showToast("\u0630\u062E\u06CC\u0631\u0647 \u0634\u062F \u2705", "\u0648\u06CC\u0698\u06AF\u06CC\u200C\u0647\u0627 \u0628\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06CC \u0634\u062F", "OWN", false);
+        setTimeout(hideToast, 1200);
+    }
+    else {
+        showToast("\u062E\u0637\u0627", "\u0630\u062E\u06CC\u0631\u0647 \u0648\u06CC\u0698\u06AF\u06CC\u200C\u0647\u0627 \u0646\u0627\u0645\u0648\u0641\u0642 \u0628\u0648\u062F", "OWN", false);
+    }
+});
+(_u = el("saveWallet")) === null || _u === void 0 ? void 0 : _u.addEventListener("click", async () => {
+    var _a;
+    const wallet = ((_a = el("walletAddressInput")) === null || _a === void 0 ? void 0 : _a.value) || "";
+    const { json } = await adminApi("/api/admin/wallet", { wallet });
+    if (json === null || json === void 0 ? void 0 : json.ok) {
+        showToast("\u0630\u062E\u06CC\u0631\u0647 \u0634\u062F \u2705", "\u0622\u062F\u0631\u0633 \u0648\u0644\u062A \u0628\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06CC \u0634\u062F", "OWN", false);
+        setTimeout(hideToast, 1200);
+    }
+    else {
+        showToast("\u062E\u0637\u0627", "\u0630\u062E\u06CC\u0631\u0647 \u0622\u062F\u0631\u0633 \u0648\u0644\u062A \u0646\u0627\u0645\u0648\u0641\u0642 \u0628\u0648\u062F", "OWN", false);
+    }
+});
+(_v = el("refreshTickets")) === null || _v === void 0 ? void 0 : _v.addEventListener("click", async () => {
+    showToast("\u062F\u0631 \u062D\u0627\u0644 \u062F\u0631\u06CC\u0627\u0641\u062A\u2026", "\u0644\u06CC\u0633\u062A \u062A\u06CC\u06A9\u062A\u200C\u0647\u0627", "TICKET", true);
+    await refreshTickets();
+    showToast("\u0622\u0645\u0627\u062F\u0647 \u2705", "\u062A\u06CC\u06A9\u062A\u200C\u0647\u0627 \u0628\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06CC \u0634\u062F", "TICKET", false);
+    setTimeout(hideToast, 1000);
+});
+(_w = el("updateTicket")) === null || _w === void 0 ? void 0 : _w.addEventListener("click", async () => {
+    var _a, _b, _c;
+    const id = ((_a = el("ticketSelect")) === null || _a === void 0 ? void 0 : _a.value) || "";
+    const status = ((_b = el("ticketStatus")) === null || _b === void 0 ? void 0 : _b.value) || "pending";
+    const reply = (((_c = el("ticketReply")) === null || _c === void 0 ? void 0 : _c.value) || "").trim();
+    if (!id) {
+        showToast("\u062E\u0637\u0627", "\u06CC\u06A9 \u062A\u06CC\u06A9\u062A \u0627\u0646\u062A\u062E\u0627\u0628 \u06A9\u0646\u06CC\u062F.", "TICKET", false);
+        return;
+    }
+    showToast("\u062F\u0631 \u062D\u0627\u0644 \u062B\u0628\u062A\u2026", "\u0628\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06CC \u062A\u06CC\u06A9\u062A", "TICKET", true);
+    const { json } = await adminApi("/api/admin/tickets/update", { id, status, reply });
+    if (json === null || json === void 0 ? void 0 : json.ok) {
+        if (el("ticketReply"))
+            el("ticketReply").value = "";
+        await refreshTickets();
+        showToast("\u062B\u0628\u062A \u0634\u062F \u2705", "\u062A\u06CC\u06A9\u062A \u0628\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06CC \u0634\u062F", "TICKET", false);
+        setTimeout(hideToast, 1200);
+    }
+    else {
+        showToast("\u062E\u0637\u0627", "\u062B\u0628\u062A \u062A\u06CC\u06A9\u062A \u0646\u0627\u0645\u0648\u0641\u0642 \u0628\u0648\u062F", "TICKET", false);
+    }
+});
+(_x = el("ticketSelect")) === null || _x === void 0 ? void 0 : _x.addEventListener("change", () => {
+    var _a;
+    const id = ((_a = el("ticketSelect")) === null || _a === void 0 ? void 0 : _a.value) || "";
+    const t = ADMIN_TICKETS.find((x) => x.id === id);
+    if (t && el("ticketStatus"))
+        el("ticketStatus").value = t.status || "pending";
+});
+(_y = el("ticketReplyTemplate")) === null || _y === void 0 ? void 0 : _y.addEventListener("change", pickTicketReplyTemplate);
+(_z = el("ticketQuickPending")) === null || _z === void 0 ? void 0 : _z.addEventListener("click", () => applyTicketFilter("pending"));
+(_0 = el("ticketQuickAnswered")) === null || _0 === void 0 ? void 0 : _0.addEventListener("click", () => applyTicketFilter("answered"));
+(_1 = el("refreshWithdrawals")) === null || _1 === void 0 ? void 0 : _1.addEventListener("click", async () => {
+    showToast("\u062F\u0631 \u062D\u0627\u0644 \u062F\u0631\u06CC\u0627\u0641\u062A\u2026", "\u0644\u06CC\u0633\u062A \u0628\u0631\u062F\u0627\u0634\u062A\u200C\u0647\u0627", "WD", true);
+    await refreshWithdrawals();
+    showToast("\u0622\u0645\u0627\u062F\u0647 \u2705", "\u0628\u0631\u062F\u0627\u0634\u062A\u200C\u0647\u0627 \u0628\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06CC \u0634\u062F", "WD", false);
+    setTimeout(hideToast, 1000);
+});
+(_2 = el("reviewWithdrawalBtn")) === null || _2 === void 0 ? void 0 : _2.addEventListener("click", async () => {
+    var _a, _b, _c;
+    const id = ((_a = el("withdrawSelect")) === null || _a === void 0 ? void 0 : _a.value) || "";
+    const decision = ((_b = el("withdrawDecision")) === null || _b === void 0 ? void 0 : _b.value) || "rejected";
+    const txHash = (((_c = el("withdrawTxHash")) === null || _c === void 0 ? void 0 : _c.value) || "").trim();
+    if (!id) {
+        showToast("\u062E\u0637\u0627", "\u06CC\u06A9 \u0628\u0631\u062F\u0627\u0634\u062A \u0627\u0646\u062A\u062E\u0627\u0628 \u06A9\u0646\u06CC\u062F.", "WD", false);
+        return;
+    }
+    showToast("\u062F\u0631 \u062D\u0627\u0644 \u062B\u0628\u062A\u2026", "\u0628\u0631\u0631\u0633\u06CC \u0628\u0631\u062F\u0627\u0634\u062A", "WD", true);
+    const { json } = await adminApi("/api/admin/withdrawals/review", { id, decision, txHash });
+    if (json === null || json === void 0 ? void 0 : json.ok) {
+        if (el("withdrawTxHash"))
+            el("withdrawTxHash").value = "";
+        await refreshWithdrawals();
+        showToast("\u062B\u0628\u062A \u0634\u062F \u2705", "\u0628\u0631\u062F\u0627\u0634\u062A \u0628\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06CC \u0634\u062F", "WD", false);
+        setTimeout(hideToast, 1200);
+    }
+    else {
+        showToast("\u062E\u0637\u0627", "\u062B\u0628\u062A \u0628\u0631\u062F\u0627\u0634\u062A \u0646\u0627\u0645\u0648\u0641\u0642 \u0628\u0648\u062F", "WD", false);
+    }
+});
+(_3 = el("refreshPromptReqs")) === null || _3 === void 0 ? void 0 : _3.addEventListener("click", async () => {
+    showToast("\u062F\u0631 \u062D\u0627\u0644 \u062F\u0631\u06CC\u0627\u0641\u062A\u2026", "\u062F\u0631\u062E\u0648\u0627\u0633\u062A\u200C\u0647\u0627\u06CC \u067E\u0631\u0627\u0645\u067E\u062A", "PR", true);
+    await refreshPromptReqs();
+    showToast("\u0622\u0645\u0627\u062F\u0647 \u2705", "\u0644\u06CC\u0633\u062A \u0628\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06CC \u0634\u062F", "PR", false);
+    setTimeout(hideToast, 1000);
+});
+(_4 = el("decidePromptReqBtn")) === null || _4 === void 0 ? void 0 : _4.addEventListener("click", async () => {
+    var _a, _b, _c;
+    const requestId = ((_a = el("promptReqSelect")) === null || _a === void 0 ? void 0 : _a.value) || "";
+    const status = ((_b = el("promptReqDecision")) === null || _b === void 0 ? void 0 : _b.value) || "rejected";
+    const promptId = (((_c = el("promptReqPromptId")) === null || _c === void 0 ? void 0 : _c.value) || "").trim();
+    if (!requestId) {
+        showToast("\u062E\u0637\u0627", "\u06CC\u06A9 \u062F\u0631\u062E\u0648\u0627\u0633\u062A \u0631\u0627 \u0627\u0646\u062A\u062E\u0627\u0628 \u06A9\u0646\u06CC\u062F.", "PR", false);
+        return;
+    }
+    if (status === "approved" && !promptId) {
+        showToast("\u062E\u0637\u0627", "\u0628\u0631\u0627\u06CC \u062A\u0627\u06CC\u06CC\u062F \u0628\u0627\u06CC\u062F Prompt ID \u0648\u0627\u0631\u062F \u06A9\u0646\u06CC\u062F.", "PR", false);
+        return;
+    }
+    showToast("\u062F\u0631 \u062D\u0627\u0644 \u062B\u0628\u062A\u2026", "\u0628\u0631\u0631\u0633\u06CC \u062F\u0631\u062E\u0648\u0627\u0633\u062A", "PR", true);
+    const { json } = await adminApi("/api/admin/custom-prompts/requests", { action: "decide", requestId, status, promptId });
+    if (json === null || json === void 0 ? void 0 : json.ok) {
+        await refreshPromptReqs();
+        showToast("\u062B\u0628\u062A \u0634\u062F \u2705", "\u062F\u0631\u062E\u0648\u0627\u0633\u062A \u0628\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06CC \u0634\u062F", "PR", false);
+        setTimeout(hideToast, 1200);
+    }
+    else {
+        showToast("\u062E\u0637\u0627", "\u062B\u0628\u062A \u062F\u0631\u062E\u0648\u0627\u0633\u062A \u0646\u0627\u0645\u0648\u0641\u0642 \u0628\u0648\u062F", "PR", false);
+    }
+});
+(_5 = el("promptReqSelect")) === null || _5 === void 0 ? void 0 : _5.addEventListener("change", () => {
+    var _a;
+    const id = ((_a = el("promptReqSelect")) === null || _a === void 0 ? void 0 : _a.value) || "";
+    const r = ADMIN_PROMPT_REQS.find((x) => x.id === id);
+    if (r && el("promptReqPromptId"))
+        el("promptReqPromptId").value = r.promptId || "";
+    if (r && el("promptReqDecision"))
+        el("promptReqDecision").value = (r.status === "approved" ? "approved" : (r.status === "rejected" ? "rejected" : "rejected"));
+});
+(_6 = el("saveCapitalToggle")) === null || _6 === void 0 ? void 0 : _6.addEventListener("click", async () => {
+    var _a, _b;
+    const username = (((_a = el("capitalToggleUser")) === null || _a === void 0 ? void 0 : _a.value) || "").trim();
+    const enabled = (((_b = el("capitalToggleEnabled")) === null || _b === void 0 ? void 0 : _b.value) || "true") === "true";
+    if (!username) {
+        showToast("\u062E\u0637\u0627", "\u06CC\u0648\u0632\u0631\u0646\u06CC\u0645 \u0631\u0627 \u0648\u0627\u0631\u062F \u06A9\u0646\u06CC\u062F.", "CAP", false);
+        return;
+    }
+    const { json } = await adminApi("/api/admin/capital/toggle", { username, enabled });
+    if (json === null || json === void 0 ? void 0 : json.ok) {
+        showToast("\u062B\u0628\u062A \u0634\u062F \u2705", "\u062A\u0646\u0638\u06CC\u0645 \u0633\u0631\u0645\u0627\u06CC\u0647 \u0628\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06CC \u0634\u062F", "CAP", false);
+        setTimeout(hideToast, 1200);
+    }
+    else {
+        showToast("\u062E\u0637\u0627", "\u062B\u0628\u062A \u0646\u0627\u0645\u0648\u0641\u0642 \u0628\u0648\u062F", "CAP", false);
+    }
+});
+(_7 = el("customPromptsJsonFile")) === null || _7 === void 0 ? void 0 : _7.addEventListener("change", async (ev) => {
+    var _a, _b;
+    const file = (_b = (_a = ev === null || ev === void 0 ? void 0 : ev.target) === null || _a === void 0 ? void 0 : _a.files) === null || _b === void 0 ? void 0 : _b[0];
+    if (!file)
+        return;
+    try {
+        const txt = await file.text();
+        const parsed = safeJsonParse(txt, null);
+        if (!Array.isArray(parsed)) {
+            showToast("\u062E\u0637\u0627", "\u0641\u0627\u06CC\u0644 JSON \u0628\u0627\u06CC\u062F \u0622\u0631\u0627\u06CC\u0647 \u0628\u0627\u0634\u062F", "ADM", false);
+            return;
+        }
+        if (el("customPromptsJson"))
+            el("customPromptsJson").value = JSON.stringify(parsed, null, 2);
+        showToast("\u0628\u0627\u0631\u06AF\u0630\u0627\u0631\u06CC \u0634\u062F \u2705", "JSON \u067E\u0631\u0627\u0645\u067E\u062A \u0622\u0645\u0627\u062F\u0647 \u0630\u062E\u06CC\u0631\u0647 \u0627\u0633\u062A", "ADM", false);
+    }
+    catch (_c) {
+        showToast("\u062E\u0637\u0627", "\u062E\u0648\u0627\u0646\u062F\u0646 \u0641\u0627\u06CC\u0644 JSON \u0646\u0627\u0645\u0648\u0641\u0642 \u0628\u0648\u062F", "ADM", false);
+    }
+});
+(_8 = el("saveCustomPrompts")) === null || _8 === void 0 ? void 0 : _8.addEventListener("click", async () => {
+    var _a;
+    const raw = ((_a = el("customPromptsJson")) === null || _a === void 0 ? void 0 : _a.value) || "[]";
+    const customPrompts = safeJsonParse(raw, []);
+    const { json } = await adminApi("/api/admin/custom-prompts", { customPrompts });
+    if (json === null || json === void 0 ? void 0 : json.ok) {
+        showToast("\u0630\u062E\u06CC\u0631\u0647 \u0634\u062F \u2705", "\u067E\u0631\u0627\u0645\u067E\u062A\u200C\u0647\u0627\u06CC \u0627\u062E\u062A\u0635\u0627\u0635\u06CC \u0628\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06CC \u0634\u062F", "ADM", false);
+        fillCustomPrompts(json.customPrompts || []);
+    }
+});
+(_9 = el("sendCustomPrompt")) === null || _9 === void 0 ? void 0 : _9.addEventListener("click", async () => {
+    var _a, _b;
+    const username = ((_a = el("customPromptUser")) === null || _a === void 0 ? void 0 : _a.value) || "";
+    const promptId = ((_b = el("customPromptId")) === null || _b === void 0 ? void 0 : _b.value) || "";
+    const { json } = await adminApi("/api/admin/custom-prompts/send", { username, promptId });
+    if (json === null || json === void 0 ? void 0 : json.ok)
+        showToast("\u0627\u0631\u0633\u0627\u0644 \u0634\u062F \u2705", "\u067E\u0631\u0627\u0645\u067E\u062A \u0628\u0631\u0627\u06CC \u06A9\u0627\u0631\u0628\u0631 \u0627\u0631\u0633\u0627\u0644 \u0634\u062F", "ADM", false);
+});
+(_10 = el("approvePayment")) === null || _10 === void 0 ? void 0 : _10.addEventListener("click", async () => {
+    var _a, _b, _c, _d;
+    const payload = {
+        username: (((_a = el("payUsername")) === null || _a === void 0 ? void 0 : _a.value) || "").trim(),
+        amount: Number(((_b = el("payAmount")) === null || _b === void 0 ? void 0 : _b.value) || 0),
+        days: Number(((_c = el("payDays")) === null || _c === void 0 ? void 0 : _c.value) || 30),
+        txHash: (((_d = el("payTx")) === null || _d === void 0 ? void 0 : _d.value) || "").trim(),
+    };
+    if (!payload.username || !Number.isFinite(payload.amount) || payload.amount <= 0) {
+        showToast("\u062E\u0637\u0627", "\u06CC\u0648\u0632\u0631\u0646\u06CC\u0645 \u0648 \u0645\u0628\u0644\u063A \u0645\u0639\u062A\u0628\u0631 \u0631\u0627 \u0648\u0627\u0631\u062F \u06A9\u0646\u06CC\u062F.", "PAY", false);
+        return;
+    }
+    if (!Number.isFinite(payload.days) || payload.days <= 0)
+        payload.days = 30;
+    const { json } = await adminApi("/api/admin/payments/approve", payload);
+    if (json === null || json === void 0 ? void 0 : json.ok) {
+        showToast("\u067E\u0631\u062F\u0627\u062E\u062A \u062A\u0627\u06CC\u06CC\u062F \u0634\u062F \u2705", "\u0627\u0634\u062A\u0631\u0627\u06A9 \u0641\u0639\u0627\u0644 \u0634\u062F", "PAY", false);
+        renderPayments([json.payment].filter(Boolean));
+    }
+    else {
+        showToast("\u062E\u0637\u0627", "\u062A\u0627\u06CC\u06CC\u062F \u067E\u0631\u062F\u0627\u062E\u062A \u0646\u0627\u0645\u0648\u0641\u0642 \u0628\u0648\u062F", "PAY", false);
+    }
+});
+(_11 = el("checkPayment")) === null || _11 === void 0 ? void 0 : _11.addEventListener("click", async () => {
+    var _a, _b;
+    const payload = {
+        txHash: ((_a = el("payTx")) === null || _a === void 0 ? void 0 : _a.value) || "",
+        amount: Number(((_b = el("payAmount")) === null || _b === void 0 ? void 0 : _b.value) || 0),
+        address: "",
+    };
+    const { json } = await adminApi("/api/admin/payments/check", payload);
+    if (json === null || json === void 0 ? void 0 : json.ok)
+        showToast("\u0646\u062A\u06CC\u062C\u0647 \u0628\u0644\u0627\u06A9\u200C\u0686\u06CC\u0646", JSON.stringify(json.result || {}), "CHAIN", false);
+});
+(_12 = el("activateSubscription")) === null || _12 === void 0 ? void 0 : _12.addEventListener("click", async () => {
+    var _a, _b, _c;
+    const payload = {
+        username: ((_a = el("payUsername")) === null || _a === void 0 ? void 0 : _a.value) || "",
+        days: Number(((_b = el("payDays")) === null || _b === void 0 ? void 0 : _b.value) || 30),
+        dailyLimit: Number(((_c = el("payDailyLimit")) === null || _c === void 0 ? void 0 : _c.value) || 50),
+    };
+    const { json } = await adminApi("/api/admin/subscription/activate", payload);
+    if (json === null || json === void 0 ? void 0 : json.ok)
+        showToast("\u0627\u0634\u062A\u0631\u0627\u06A9 \u0641\u0639\u0627\u0644 \u0634\u062F \u2705", "\u0641\u0639\u0627\u0644\u200C\u0633\u0627\u0632\u06CC \u062F\u0633\u062A\u06CC \u0627\u0646\u062C\u0627\u0645 \u0634\u062F", "ADM", false);
+});
+(_13 = el("loadUsers")) === null || _13 === void 0 ? void 0 : _13.addEventListener("click", async () => {
+    const [{ json: usersJson }, { json: bootJson }] = await Promise.all([
+        adminApi("/api/admin/users", { limit: 200 }),
+        adminApi("/api/admin/bootstrap", {}),
+    ]);
+    if ((usersJson === null || usersJson === void 0 ? void 0 : usersJson.ok) && (bootJson === null || bootJson === void 0 ? void 0 : bootJson.ok)) {
+        renderFullAdminReport(usersJson.users || [], bootJson.payments || [], bootJson.withdrawals || [], bootJson.tickets || []);
+    }
+    else if (usersJson === null || usersJson === void 0 ? void 0 : usersJson.ok) {
+        renderUsers(usersJson.users || []);
+    }
+});
+(_14 = el("downloadReportPdf")) === null || _14 === void 0 ? void 0 : _14.addEventListener("click", async () => {
+    try {
+        showToast("\u062F\u0631 \u062D\u0627\u0644 \u0633\u0627\u062E\u062A PDF\u2026", "\u06AF\u0632\u0627\u0631\u0634 \u06A9\u0627\u0645\u0644", "PDF", true);
+        const r = await fetch(apiUrl("/api/admin/report/pdf"), { method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ initData: INIT_DATA, limit: 250 }),
+        });
+        if (!r.ok)
+            throw new Error("http_" + r.status);
+        const blob = await r.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "admin-report-" + Date.now() + ".pdf";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        showToast("\u062F\u0627\u0646\u0644\u0648\u062F \u0634\u062F \u2705", "\u06AF\u0632\u0627\u0631\u0634 PDF \u0622\u0645\u0627\u062F\u0647 \u0627\u0633\u062A", "PDF", false);
+        setTimeout(hideToast, 1200);
+    }
+    catch (e) {
+        showToast("\u062E\u0637\u0627", "\u0633\u0627\u062E\u062A PDF \u0646\u0627\u0645\u0648\u0641\u0642 \u0628\u0648\u062F", "PDF", false);
+    }
+});
+(_15 = el("reconnect")) === null || _15 === void 0 ? void 0 : _15.addEventListener("click", async () => {
+    OFFLINE_MODE = false;
+    await boot();
+});
 window.addEventListener("online", () => {
-  if (pillTxt && pillTxt.textContent.toLowerCase().includes("offline")) pillTxt.textContent = "Online";
+    if (pillTxt && pillTxt.textContent.toLowerCase().includes("offline"))
+        pillTxt.textContent = "Online";
 });
-
 window.addEventListener("offline", () => {
-  if (pillTxt) pillTxt.textContent = "Offline";
+    if (pillTxt)
+        pillTxt.textContent = "Offline";
 });
-
-el("paymentPresets")?.addEventListener("click", (e) => {
-  const btn = e.target?.closest?.("[data-days]");
-  if (!btn) return;
-  const days = Number(btn.getAttribute("data-days") || 30);
-  const amount = Number(btn.getAttribute("data-amount") || 0);
-  if (el("payDays")) el("payDays").value = String(days);
-  if (el("payAmount")) el("payAmount").value = String(amount);
-  if (el("payDailyLimit") && !el("payDailyLimit").value) el("payDailyLimit").value = "50";
-  showToast("پلن انتخاب شد ✅", "روز: " + days + " | مبلغ: " + amount, "PAY", false);
+(_16 = el("paymentPresets")) === null || _16 === void 0 ? void 0 : _16.addEventListener("click", (e) => {
+    var _a, _b;
+    const btn = (_b = (_a = e.target) === null || _a === void 0 ? void 0 : _a.closest) === null || _b === void 0 ? void 0 : _b.call(_a, "[data-days]");
+    if (!btn)
+        return;
+    const days = Number(btn.getAttribute("data-days") || 30);
+    const amount = Number(btn.getAttribute("data-amount") || 0);
+    if (el("payDays"))
+        el("payDays").value = String(days);
+    if (el("payAmount"))
+        el("payAmount").value = String(amount);
+    if (el("payDailyLimit") && !el("payDailyLimit").value)
+        el("payDailyLimit").value = "50";
+    showToast("\u067E\u0644\u0646 \u0627\u0646\u062A\u062E\u0627\u0628 \u0634\u062F \u2705", "\u0631\u0648\u0632: " + days + " | \u0645\u0628\u0644\u063A: " + amount, "PAY", false);
 });
-
-boot();`;
+boot();
+`;
 
 
 async function runDailySuggestions(env) {
