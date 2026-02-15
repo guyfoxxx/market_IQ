@@ -39,7 +39,7 @@ export default {
         applyLocaleFromTelegramUser(st, v.fromLike || {});
         if (env.BOT_KV) await saveUser(v.userId, st, env);
         const quota = isStaff(v.fromLike, env) ? "∞" : `points:${Number(st.points?.balance || 0)}`;
-        const symbols = [...MAJORS, ...METALS, ...INDICES, ...CRYPTOS];
+        const symbols = await getMiniappSymbolUniverse(env);
         const miniToken = await issueMiniappToken(env, v.userId, v.fromLike || {});
         const styles = await getStyleList(env);
         const [offerBanner, offerBannerImage] = await Promise.all([getOfferBanner(env), getOfferBannerImage(env)]);
@@ -92,7 +92,7 @@ export default {
           st.promptMode = allowedPromptModes.includes(pm) ? pm : (st.promptMode || "style_plus_custom");
         }
         if (typeof body.selectedSymbol === "string") {
-          const s = String(body.selectedSymbol || "").trim().toUpperCase();
+          const s = normalizeSymbol(body.selectedSymbol);
           if (!s || isSymbol(s)) st.selectedSymbol = s;
         }
         if (body.capitalAmount != null) {
@@ -626,7 +626,7 @@ TxID: ${txid}
       }
 
       if (pathEndsWith(url.pathname, "/api/chart") && request.method === "GET") {
-        const symbol = String(url.searchParams.get("symbol") || "").trim().toUpperCase();
+        const symbol = normalizeSymbol(url.searchParams.get("symbol") || "");
         const tf = String(url.searchParams.get("tf") || "H4").trim().toUpperCase();
         const levelsRaw = String(url.searchParams.get("levels") || "").trim();
         const chartId = String(url.searchParams.get("id") || "").trim();
@@ -701,7 +701,7 @@ TxID: ${txid}
         if (!v.ok && !allowGuest) return jsonResponse({ ok: false, error: v.reason }, 401);
 
         const st = v.ok ? await ensureUser(v.userId, env) : defaultUser("guest");
-        const symbol = String(body.symbol || "").trim();
+        const symbol = normalizeSymbol(body.symbol || "");
         const tf = String(body.timeframe || st.timeframe || "H4").toUpperCase();
         if (!symbol || !isSymbol(symbol)) return jsonResponse({ ok: false, error: "invalid_symbol" }, 400);
 
@@ -757,7 +757,7 @@ TxID: ${txid}
         const allowGuest = miniappGuestEnabled(env) && !v.ok && !!body.allowGuest;
         if (!v.ok && !allowGuest) return jsonResponse({ ok: false, error: v.reason }, 401);
 
-        const symbol = String(body.symbol || "").trim().toUpperCase();
+        const symbol = normalizeSymbol(body.symbol || "");
         if (!symbol || !isSymbol(symbol)) return jsonResponse({ ok: false, error: "invalid_symbol" }, 400);
 
         const newsRespKey = `news|${symbol}`;
@@ -782,7 +782,7 @@ TxID: ${txid}
         const allowGuest = miniappGuestEnabled(env) && !v.ok && !!body.allowGuest;
         if (!v.ok && !allowGuest) return jsonResponse({ ok: false, error: v.reason }, 401);
 
-        const symbol = String(body.symbol || "").trim().toUpperCase();
+        const symbol = normalizeSymbol(body.symbol || "");
         if (!symbol || !isSymbol(symbol)) return jsonResponse({ ok: false, error: "invalid_symbol" }, 400);
 
         const newsAnRespKey = `news_an|${symbol}`;
@@ -807,7 +807,7 @@ TxID: ${txid}
         if (!v.ok) return jsonResponse({ ok: false, error: v.reason }, 401);
 
         const st = await ensureUser(v.userId, env, v.fromLike);
-        const symbol = String(body.symbol || "").trim();
+        const symbol = normalizeSymbol(body.symbol || "");
         if (!symbol || !isSymbol(symbol)) return jsonResponse({ ok: false, error: "invalid_symbol" }, 400);
 
         const isOnboardingReady = !!(
@@ -986,6 +986,10 @@ const WELCOME_MINIAPP =
 
 /* ========================== CONFIG ========================== */
 const MAJORS = ["EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "USDCAD", "NZDUSD"];
+const FX_CODES = ["USD","EUR","GBP","JPY","CHF","AUD","CAD","NZD","SEK","NOK","DKK","PLN","HUF","CZK","TRY","ZAR","MXN","BRL","RUB","CNY","HKD","SGD"];
+const CRYPTO_QUOTE_CODES = ["USDT","USDC","BUSD","TUSD","FDUSD","USD","BTC","ETH","BNB"];
+const EXTRA_INDICES = ["US500","NAS100","GER40","UK100","JP225","HK50","AUS200"];
+
 const METALS = ["XAUUSD", "XAGUSD"];
 const INDICES = ["DJI", "NDX", "SPX"];
 const CRYPTOS = [
@@ -2775,10 +2779,30 @@ async function visionProvider(name, imageUrl, visionPrompt, env, getCache, setCa
 
 /* ========================== MARKET DATA (LIVE) ========================== */
 function assetKind(symbol) {
-  if (symbol.endsWith("USDT")) return "crypto";
-  if (/^[A-Z]{6}$/.test(symbol)) return "forex";
-  if (symbol === "XAUUSD" || symbol === "XAGUSD") return "metal";
-  if (symbol === "DJI" || symbol === "NDX" || symbol === "SPX") return "index";
+  const s = String(symbol || "").trim().toUpperCase();
+  if (!s) return "unknown";
+
+  // Metals
+  if (s === "XAUUSD" || s === "XAGUSD") return "metal";
+
+  // Indices / CFDs
+  if (INDICES.includes(s) || (EXTRA_INDICES || []).includes(s)) return "index";
+
+  // Forex: 6 letters and both legs in FX_CODES
+  if (/^[A-Z]{6}$/.test(s)) {
+    const a = s.slice(0, 3), b = s.slice(3, 6);
+    if ((FX_CODES || []).includes(a) && (FX_CODES || []).includes(b)) return "forex";
+  }
+
+  // Crypto: Binance-style tickers, including BTC/ETH/BNB quotes
+  if (/^[A-Z0-9]{3,20}$/.test(s)) {
+    for (const q of (CRYPTO_QUOTE_CODES || [])) {
+      if (s.endsWith(q) && s.length > q.length) return "crypto";
+    }
+    // Heuristic: 6-letter non-FX pairs are usually crypto (e.g. ETHBTC)
+    if (/^[A-Z]{6}$/.test(s)) return "crypto";
+  }
+
   return "unknown";
 }
 
@@ -2884,7 +2908,7 @@ function downsampleCandles(candles, groupSize) {
 }
 
 async function fetchBinanceCandles(symbol, timeframe, limit, timeoutMs) {
-  if (!symbol.endsWith("USDT")) throw new Error("binance_not_crypto");
+  if (assetKind(symbol) !== "crypto") throw new Error("binance_not_crypto");
   const interval = mapTimeframeToBinance(timeframe);
   const urls = [
     `https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(symbol)}&interval=${interval}&limit=${limit}`,
@@ -4294,14 +4318,15 @@ ${textClean}`);
     }
 
 
-    if (isSymbol(text)) {
+    const sym = normalizeSymbol(text);
+    if (isSymbol(sym)) {
       if (!st.profile?.name || !st.profile?.phone) {
         await tgSendMessage(env, chatId, "برای شروع تحلیل، ابتدا پروفایل را کامل کن ✅", mainMenuKeyboard(env));
         await startOnboarding(env, chatId, from, st);
         return;
       }
 
-      st.selectedSymbol = text;
+      st.selectedSymbol = sym;
       st.state = "await_prompt";
       await saveUser(userId, st, env);
 
@@ -4520,8 +4545,37 @@ function maskPhone(p) {
 }
 
 /* ========================== ROUTING HELPERS ========================== */
+function normalizeSymbol(raw) {
+  let s = String(raw || "").trim();
+  if (!s) return "";
+  s = s.toUpperCase();
+  s = s.replace(/\s+/g, "");
+  // common forex format EUR/USD -> EURUSD
+  s = s.replace(/\//g, "");
+  return s;
+}
+
 function isSymbol(t) {
-  return MAJORS.includes(t) || METALS.includes(t) || INDICES.includes(t) || CRYPTOS.includes(t);
+  const s = normalizeSymbol(t);
+  if (!s) return false;
+
+  // known lists
+  if (MAJORS.includes(s) || METALS.includes(s) || INDICES.includes(s) || CRYPTOS.includes(s) || (EXTRA_INDICES || []).includes(s)) return true;
+
+  // FX / metal
+  if (/^[A-Z]{6}$/.test(s)) {
+    const a = s.slice(0, 3), b = s.slice(3, 6);
+    if ((FX_CODES || []).includes(a) && (FX_CODES || []).includes(b)) return true;
+  }
+  if (s === "XAUUSD" || s === "XAGUSD") return true;
+
+  // crypto (binance-like)
+  if (/^[A-Z0-9]{3,20}$/.test(s) && assetKind(s) === "crypto") return true;
+
+  // yahoo / stocks / indices (safe ticker charset)
+  if (/^[A-Z0-9^=._\-]{1,24}$/.test(s)) return true;
+
+  return false;
 }
 
 /* ========================== TEXTS ========================== */
@@ -5231,9 +5285,66 @@ function miniappGuestEnabled(env) {
   return !(v === "0" || v === "false" || v === "no");
 }
 
+
+async function fetchBinanceSymbolList(env) {
+  const cacheKey = "binance_exchangeInfo_symbols_v1";
+  const cached = apiRespCacheGet(cacheKey);
+  if (cached) return cached;
+
+  const timeoutMs = Number(env.BINANCE_INFO_TIMEOUT_MS || 9000);
+  const urls = [
+    "https://api.binance.com/api/v3/exchangeInfo",
+    "https://data-api.binance.vision/api/v3/exchangeInfo",
+    "https://api.binance.us/api/v3/exchangeInfo",
+  ];
+
+  let lastErr = null;
+  for (const url of urls) {
+    try {
+      const r = await fetchWithTimeout(url, { headers: { "User-Agent": "Mozilla/5.0" } }, timeoutMs);
+      if (!r.ok) throw new Error("binance_exinfo_http_" + r.status);
+      const j = await r.json().catch(() => null);
+      const arr = (j && Array.isArray(j.symbols)) ? j.symbols : [];
+      const list = arr
+        .filter(x => x && (x.status === "TRADING" || x.status === "BREAK"))
+        .filter(x => (x.isSpotTradingAllowed !== false))
+        .filter(x => (Array.isArray(x.permissions) ? x.permissions.includes("SPOT") : true))
+        .map(x => String(x.symbol || "").toUpperCase())
+        .filter(Boolean);
+
+      apiRespCacheSet(cacheKey, list, Number(env.BINANCE_SYMBOLS_CACHE_MS || (6 * 60 * 60 * 1000)));
+      return list;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error("binance_exinfo_failed");
+}
+
+async function getMiniappSymbolUniverse(env) {
+  const cacheKey = "miniapp_symbols_all_v2";
+  const cached = apiRespCacheGet(cacheKey);
+  if (cached) return cached;
+
+  let binance = [];
+  try { binance = await fetchBinanceSymbolList(env); } catch { binance = []; }
+
+  const base = [...MAJORS, ...METALS, ...INDICES, ...(EXTRA_INDICES || []), ...CRYPTOS];
+  const set = new Set();
+  for (const s of base.concat(binance)) {
+    const v = normalizeSymbol(s);
+    if (v) set.add(v);
+  }
+
+  const out = Array.from(set);
+  out.sort();
+  apiRespCacheSet(cacheKey, out, Number(env.SYMBOLS_CACHE_MS || (6 * 60 * 60 * 1000)));
+  return out;
+}
+
 async function buildMiniappGuestPayload(env) {
   const st = defaultUser("guest");
-  const symbols = [...MAJORS, ...METALS, ...INDICES, ...CRYPTOS];
+  const symbols = await getMiniappSymbolUniverse(env);
   const styles = await getStyleList(env);
   return {
     ok: true,
