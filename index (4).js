@@ -208,11 +208,9 @@ ${reply}`;
         }
 
         if (pathEndsWith(url.pathname, "/api/admin/prompt")) {
-          if (typeof body.prompt === "string" && env.BOT_KV) {
-            await env.BOT_KV.put("settings:analysis_prompt", body.prompt.trim());
-          }
+          // Base analysis prompt override via KV is disabled by design (deterministic prompts).
           const prompt = await getAnalysisPrompt(env);
-          return jsonResponse({ ok: true, prompt });
+          return jsonResponse({ ok: true, prompt, note: "kv_prompt_override_disabled" });
         }
 
         if (pathEndsWith(url.pathname, "/api/admin/styles")) {
@@ -825,6 +823,43 @@ TxID: ${txid}
 
         const userPrompt = typeof body.userPrompt === "string" ? body.userPrompt : "";
 
+
+        // Allow passing UI-selected settings in /api/analyze so the user doesn't need to press "Save" first.
+        try {
+          if (typeof body.timeframe === "string") {
+            const tf = String(body.timeframe || "").trim().toUpperCase();
+            const allowedTf = ["M15", "H1", "H4", "D1"];
+            if (allowedTf.includes(tf)) st.timeframe = tf;
+          }
+          if (typeof body.style === "string") {
+            const styles = await getStyleList(env);
+            const stLabel = normalizeStyleLabel(body.style);
+            if (styles.includes(stLabel)) st.style = stLabel;
+          }
+          if (typeof body.risk === "string") {
+            const r = String(body.risk || "").trim();
+            const allowedRisk = ["کم", "متوسط", "زیاد"];
+            if (allowedRisk.includes(r)) st.risk = r;
+          }
+          if (typeof body.newsEnabled === "boolean") st.newsEnabled = body.newsEnabled;
+          if (typeof body.promptMode === "string") {
+            const pm = String(body.promptMode || "").trim();
+            const allowedPromptModes = ["style_only", "combined_all", "custom_only", "style_plus_custom"];
+            st.promptMode = allowedPromptModes.includes(pm) ? pm : (st.promptMode || "style_plus_custom");
+          }
+          if (typeof body.selectedSymbol === "string") {
+            const ss = normalizeSymbol(body.selectedSymbol);
+            if (ss && isSymbol(ss)) st.selectedSymbol = ss;
+          }
+          if (typeof body.customPromptId === "string") {
+            const prompts = await getCustomPrompts(env);
+            const id = body.customPromptId.trim();
+            st.customPromptId = prompts.find((p) => String(p?.id || "") === id) ? id : "";
+          }
+        } catch (e) {
+          // ignore settings override errors
+        }
+
         // NEW: points-based billing for free-pro users
         const ptsCheck = canSpendAnalysisPoints(st, v.fromLike, env);
         if (!ptsCheck.ok) {
@@ -1377,10 +1412,11 @@ const DEFAULT_ANALYSIS_PROMPT = `SYSTEM: تحلیل‌گر حرفه‌ای با�
 2) فقط بر اساس STYLE_PROMPT_JSON (سبک انتخابی کاربر) تحلیل کن.
 3) فقط از داده MARKET_DATA استفاده کن و خیال‌پردازی نکن.
 4) ورودی‌های کاربر را الزامی لحاظ کن: Symbol, Timeframe, Risk, Capital.
-5) خروجی را مرحله‌ای، اجرایی و با مدیریت ریسک ارائه بده.
-6) در صورت نبود داده کافی، شفاف اعلام کن.
+5) اگر STYLE_PROMPT_JSON قالب/ساختار خروجی مشخص کرده، دقیقاً همان را رعایت کن (به‌خصوص برای ICT/SMC).
+6) خروجی را مرحله‌ای، اجرایی و با مدیریت ریسک ارائه بده.
+7) اگر داده کافی نیست، شفاف بگو چه چیزی کم است و از حدس‌زدن خودداری کن.
 
-ساختار خروجی:
+ساختار خروجی (اگر سبک قالب اختصاصی نداد):
 ۱) بایاس و وضعیت ساختار
 ۲) نواحی و نقدینگی/سطوح کلیدی
 ۳) سناریوی ورود (Entry/SL/TP)
@@ -1392,7 +1428,62 @@ const DEFAULT_ANALYSIS_PROMPT = `SYSTEM: تحلیل‌گر حرفه‌ای با�
  * into the analysis prompt. Admin can still override the global base prompt via KV.
  */
 const STYLE_PROMPTS_DEFAULT = {
-  "ICT": `{"role":"system","identity":{"title":"ICT & Smart Money Analyst","language":"persian","methodology":["ICT (Inner Circle Trader)","Smart Money Concepts"],"restrictions":["No indicators","No retail concepts","ICT & Smart Money concepts ONLY"]},"task":{"description":"Analyze the requested market (Symbol, Timeframe) using ICT & Smart Money Concepts ONLY."},"analysis_requirements":{"1_higher_timeframe_bias":{"timeframes":["Daily","H4"],"elements":["Overall HTF bias (Bullish / Bearish / Neutral)","Premium zone","Discount zone","Equilibrium level (50%)","Imbalance vs Balance state"]},"2_liquidity_mapping":{"identify":["Equal Highs (EQH)","Equal Lows (EQL)","Buy-side liquidity","Sell-side liquidity","Stop-loss pools"],"objective":"Determine where liquidity is resting and likely to be engineered toward"},"3_market_structure":{"elements":["BOS (Break of Structure)","MSS / CHoCH (Market Structure Shift)"],"clarification":["Manipulation phase","Expansion phase"]},"4_pd_arrays":{"arrays":["Bullish Order Blocks","Bearish Order Blocks","Fair Value Gaps (FVG)","Liquidity Voids","Previous Day High (PDH)","Previous Day Low (PDL)","Previous Week High (PWH)","Previous Week Low (PWL)"]},"5_kill_zones":{"condition":"Intraday only","zones":["London Kill Zone","New York Kill Zone"],"explanation":"Explain why timing matters for this setup"},"6_entry_model":{"model_examples":["Liquidity Sweep → MSS → FVG Entry","Liquidity Sweep → Order Block Entry"],"must_include":["Entry price","Stop Loss location (above/below OB or swing)","Take Profit targets based on liquidity"]},"7_narrative":{"storytelling":["Who is trapped?","Where did smart money enter?","Where is price likely engineered to go?"]}},"execution_plan":{"bias":"Bullish or Bearish","entry_conditions":"Clear confirmation rules","targets":"Liquidity-based targets","invalidation_point":"Price level that invalidates the idea"},"output_style":{"tone":"Professional, precise, educational","structure":"Step-by-step, clearly labeled sections","language":"Clear and technical ICT terminology"}}`,
+  "ICT": `{"role":"system","identity":{"title":"ICT & Smart Money Analyst","language":"persian","methodology":["ICT (Inner Circle Trader)","Smart Money Concepts"],"restrictions":["No indicators unless user explicitly asks","No retail concepts","ICT & Smart Money concepts ONLY"]},"task":{"description":"Analyze the requested market (Symbol, Timeframe) using ICT & Smart Money Concepts ONLY, based strictly on MARKET_DATA OHLC and (if provided) NEWS_ANALYSIS_FA."},"output_requirements":{"must_follow_template":true,"template_markdown":"برای تجزیه و تحلیل بازار {SYMBOL} با استفاده از مفاهیم ICT (Inner Circle Trader) و Smart Money، به ساختار زیر عمل می‌کنیم. این تحلیل بر اساس داده‌های واقعی موجود در MARKET_DATA انجام می‌شود و برای تصمیم‌گیری نهایی باید با شرایط زنده بازار و مدیریت ریسک تأیید شود.
+
+### 1. تمایل زمان بالا (Higher Timeframe Bias)
+- تمایل HTF:
+  - زمان روزانه: {D1_BIAS}
+  - زمان H4: {H4_BIAS}
+- مناطق پریمیوم و دیسکانت:
+  - منطقه پریمیوم: {PREMIUM_ZONE}
+  - منطقه دیسکانت: {DISCOUNT_ZONE}
+- تعادل یا عدم تعادل: {EQ_BALANCE_STATE}
+
+### 2. نقشه‌برداری از نقدینگی (Liquidity Mapping)
+- قله‌های برابر / کف‌های برابر:
+  - EQH: {EQH_LEVELS}
+  - EQL: {EQL_LEVELS}
+- نقدینگی خرید (Buy-side): {BSL}
+- نقدینگی فروش (Sell-side): {SSL}
+- مخازن توقف محتمل (Stop Pools): {STOP_POOLS}
+
+### 3. ساختار بازار (Market Structure)
+- BOS: {BOS_DESCRIPTION}
+- MSS/CHoCH: {MSS_DESCRIPTION}
+- دستکاری/گسترش: {MANIPULATION_EXPANSION_NOTE}
+
+### 4. آرایه‌های PD (PD Arrays)
+- Order Blocks:
+  - Bullish OB: {BULLISH_OB}
+  - Bearish OB: {BEARISH_OB}
+- FVG: {FVG_LEVELS}
+- Liquidity Void: {LIQ_VOID_LEVELS}
+- قله/کف‌های قبلی:
+  - PDH: {PDH}
+  - PDL: {PDL}
+  - PWH: {PWH}
+  - PWL: {PWL}
+
+### 5. مناطق کشتار (Kill Zones) (اگر اینترادی)
+- لندن: 03:00 تا 11:00 UTC
+- نیویورک: 13:00 تا 21:00 UTC
+- اهمیت زمان: {KZ_NOTE}
+
+### 6. مدل ورود (Entry Model)
+- مدل: {ENTRY_MODEL}
+- ورود: {ENTRY_PRICE}
+- حد ضرر (SL): {STOP_LOSS}
+- تارگت‌ها (TP): {TAKE_PROFITS}
+
+### 7. روایت (Narrative)
+- چه کسی در تله است؟ {TRAPPED_TRADERS}
+- پول هوشمند کجا وارد شد؟ {SMART_MONEY_ENTRY}
+- قیمت احتمالاً به کجا مهندسی شده است؟ {ENGINEERED_TARGET}
+
+### برنامه اجرایی
+- برنامه صعودی/نزولی: {EXEC_PLAN}
+- نقطه ابطال (Invalidation Point): {INVALIDATION}
+","notes":["مقادیر داخل {…} را با اعداد/سطوح واقعی از MARKET_DATA پر کن.","اگر بخشی داده کافی ندارد، صریح بنویس «داده کافی نیست» و دلیلش را بگو.","به جای حدس، از ساختار، های/لوهای مهم، و نقدینگی قابل مشاهده در OHLC استفاده کن."]},"analysis_requirements":{"focus":["HTF bias (D1, H4) + premium/discount/equilibrium","Liquidity pools (EQH/EQL/BSL/SSL) and sweeps","BOS/MSS + manipulation/expansion narrative","PD Arrays (OB/FVG/voids + PDH/PDL/PWH/PWL)","Entry model with SL/TP based on liquidity","Clear invalidation level"],"forbidden":["Indicators","Retail patterns not mapped to liquidity/structure"]},"language_rules":{"language":"fa","must_use_markdown_headings":true,"must_keep_numbering":true}}`,
   "ATR": `{"role":"persian quantitative_trading_assistant","strategy":"ATR-based volatility trading","analysis_requirements":{"volatility_state":["Current ATR value","Comparison with historical ATR average","Volatility expansion or contraction"],"market_condition":["Trending or Ranging","Breakout vs Mean Reversion suitability"],"trade_setup":{"entry":"Based on price structure","stop_loss":"SL = Entry ± (ATR × Multiplier)","take_profit":["TP1 based on ATR expansion","TP2 based on ATR expansion"]},"position_sizing":["Risk per trade (%)","Position size based on SL distance"],"trade_filtering":["When NOT to trade based on ATR","High-risk volatility conditions (news, spikes)"],"risk_management":["Max daily loss","Max consecutive losses","ATR-based trailing stop logic"],"summary":["Statistical justification","Expected trade duration","Risk classification (Low/Medium/High)"]}}`,
   "پرایس اکشن": `{"role":"system","description":"Professional Price Action Market Analysis Prompt","constraints":{"analysis_style":"Pure Price Action Only","indicators":"Forbidden unless explicitly requested","focus":"High-probability setups only","language":"Professional, clear, step-by-step and persian"},"required_sections":{"market_structure":{"items":["Trend identification (Uptrend / Downtrend / Range)","HH, HL, LH, LL labeling","Structure status (Intact / BOS / MSS)"]},"key_levels":{"items":["Strong Support zones","Strong Resistance zones","Flip zones (SR to Resistance / Resistance to Support)","Psychological levels (if relevant)"]},"candlestick_behavior":{"items":["Pin Bar","Engulfing","Inside Bar","Explanation of buyer/seller intent"]},"entry_scenarios":{"requirements":["Clear entry zone","Logical structure-based Stop Loss","TP1 and TP2 targets","Minimum Risk:Reward of 1:2"]},"bias_and_scenarios":{"items":["Main bias (Bullish / Bearish / Neutral)","Alternative scenario upon invalidation"]},"execution_plan":{"items":["Continuation or Reversal trade","Required confirmation before entry"]}},"instructions":["Explain everything step-by-step","Use structure-based logic","Avoid overtrading","Execution-focused explanations"]}`,
 };
@@ -1420,10 +1511,10 @@ function getStyleGuide(style) {
 
 
 async function getAnalysisPrompt(env) {
-  const kv = env.BOT_KV;
-  if (!kv) return DEFAULT_ANALYSIS_PROMPT;
-  const p = await kv.get("settings:analysis_prompt");
-  return (p && p.trim()) ? p : DEFAULT_ANALYSIS_PROMPT;
+  // NOTE: Base analysis prompt override via KV is intentionally disabled.
+  // Keep prompts deterministic and avoid stale/corrupt KV values.
+  const p = (env.ANALYSIS_PROMPT || "").toString().trim();
+  return p ? p : DEFAULT_ANALYSIS_PROMPT;
 }
 
 async function getBotWelcomeText(env) {
@@ -1473,22 +1564,22 @@ async function getStylePromptMap(env) {
   if (!env.BOT_KV) return defaults;
   const raw = await env.BOT_KV.get("settings:style_prompts_json");
   try {
-    const parsed = raw ? JSON.parse(raw) : {};
-    if (!parsed || typeof parsed !== "object") return defaults;
-    return { ...defaults, ...parsed };
+    const parsed = raw ?async function getStyleList(env) {
+  // Always include core styles. If KV overrides exist, merge them (instead of replacing).
+  const core = DEFAULT_STYLE_LIST.slice();
+  if (!env.BOT_KV) return core;
+  const raw = await env.BOT_KV.get("settings:style_list");
+  if (!raw) return core;
+  try {
+    const list = JSON.parse(raw);
+    const filtered = Array.isArray(list) ? list.filter((s) => ALLOWED_STYLE_LIST.includes(s)) : [];
+    const set = new Set(core);
+    for (const x of filtered) set.add(x);
+    return Array.from(set);
   } catch {
-    return defaults;
+    return core;
   }
-}
-
-async function setStylePromptMap(env, map) {
-  if (!env.BOT_KV) return;
-  const payload = map && typeof map === "object" ? map : {};
-  await env.BOT_KV.put("settings:style_prompts_json", JSON.stringify(payload));
-}
-
-async function getCustomPrompts(env) {
-  if (!env.BOT_KV) return DEFAULT_CUSTOM_PROMPTS.slice();
+}_PROMPTS.slice();
   const raw = await env.BOT_KV.get("settings:custom_prompts");
   try {
     const parsed = raw ? JSON.parse(raw) : [];
@@ -3765,14 +3856,19 @@ async function handleUpdate(update, env) {
       await setWallet(env, wallet);
       return tgSendMessage(env, chatId, "✅ آدرس ولت ذخیره شد.", mainMenuKeyboard(env));
     }
-
     if (text.startsWith("/setprompt")) {
-      if (!isStaff(from, env)) return tgSendMessage(env, chatId, "⛔️ فقط ادمین/اونر می‌تواند پرامپت تحلیل را تعیین کند.", mainMenuKeyboard(env));
-      const p = text.split(" ").slice(1).join(" ").trim();
-      if (!p) return tgSendMessage(env, chatId, "فرمت: /setprompt <prompt_text>", mainMenuKeyboard(env));
-      if (!env.BOT_KV) return tgSendMessage(env, chatId, "⛔️ BOT_KV فعال نیست.", mainMenuKeyboard(env));
-      await env.BOT_KV.put("settings:analysis_prompt", p);
-      return tgSendMessage(env, chatId, "✅ پرامپت تحلیل ذخیره شد.", mainMenuKeyboard(env));
+      if (!isStaff(from, env)) return tgSendMessage(env, chatId, "⛔️ فقط ادمین/اونر.", mainMenuKeyboard(env));
+      // Base analysis prompt override via KV is disabled (deterministic prompts).
+      // Use env.ANALYSIS_PROMPT (Workers Variables) or edit DEFAULT_ANALYSIS_PROMPT in code instead.
+      return tgSendMessage(
+        env,
+        chatId,
+        "⛔️ این دستور غیرفعال شده.
+
+پرامپت دیفالت از کُد/ENV خوانده می‌شود و از KV گرفته نمی‌شود.
+برای تغییر: متغیر ANALYSIS_PROMPT را در Workers Variables تنظیم کن یا DEFAULT_ANALYSIS_PROMPT را در کد تغییر بده.",
+        mainMenuKeyboard(env)
+      );
     }
 
 
@@ -7324,7 +7420,7 @@ el("analyze").addEventListener("click", async () => {
     }
     showToast("\u062F\u0631 \u062D\u0627\u0644 \u062A\u062D\u0644\u06CC\u0644\u2026", "\u062C\u0645\u0639\u200C\u0622\u0648\u0631\u06CC \u062F\u06CC\u062A\u0627 + \u062A\u0648\u0644\u06CC\u062F \u062E\u0631\u0648\u062C\u06CC", "AI", true);
     out.textContent = "\u23F3 \u062F\u0631 \u062D\u0627\u0644 \u062A\u062D\u0644\u06CC\u0644\u2026";
-    const payload = buildAuthBody({ symbol: val("symbol"), userPrompt: "" });
+    const payload = buildAuthBody({ symbol: val("symbol"), userPrompt: "", timeframe: val("timeframe"), style: val("style"), risk: val("risk"), newsEnabled: val("newsEnabled") === "true", promptMode: val("promptMode") || "style_plus_custom", selectedSymbol: val("symbol") || "", customPromptId: val("customPrompt") || "" });
     const { status, json } = await api("/api/analyze", payload);
     if (!(json === null || json === void 0 ? void 0 : json.ok)) {
         const msg = prettyErr(json, status);
