@@ -28,7 +28,9 @@ export default {
         const v = await verifyMiniappAuth(body, env);
         if (!v.ok) {
           if (miniappGuestEnabled(env)) {
-            return jsonResponse(await buildMiniappGuestPayload(env));
+            const gp = await buildMiniappGuestPayload(env);
+            gp.authError = v.reason || "";
+            return jsonResponse(gp);
           }
           return jsonResponse({ ok: false, error: v.reason }, 401);
         }
@@ -1202,18 +1204,34 @@ function awardInvitePoints(inviter, env) {
   inviter.points.earnedFromInvites = Number(inviter.points.earnedFromInvites) + gain;
 }
 function isOwner(from, env) {
+  // owner by Telegram user id OR username handle
+  const id = String(from?.id || "").trim();
+  const rawIds = String(env.OWNER_IDS || "").trim();
+  if (id && rawIds) {
+    const idSet = new Set(rawIds.split(",").map((x) => String(x || "").trim()).filter(Boolean));
+    if (idSet.has(id)) return true;
+  }
+
   const u = normHandle(from?.username);
   if (!u) return false;
-  const raw = (env.OWNER_HANDLES || "").toString().trim();
+  const raw = String(env.OWNER_HANDLES || "").trim();
   if (!raw) return false;
   const set = new Set(raw.split(",").map(normHandle).filter(Boolean));
   return set.has(u);
 }
 
 function isAdmin(from, env) {
+  // admin by Telegram user id OR username handle
+  const id = String(from?.id || "").trim();
+  const rawIds = String(env.ADMIN_IDS || "").trim();
+  if (id && rawIds) {
+    const idSet = new Set(rawIds.split(",").map((x) => String(x || "").trim()).filter(Boolean));
+    if (idSet.has(id)) return true;
+  }
+
   const u = normHandle(from?.username);
   if (!u) return false;
-  const raw = (env.ADMIN_HANDLES || "").toString().trim();
+  const raw = String(env.ADMIN_HANDLES || "").trim();
   if (!raw) return false;
   const set = new Set(raw.split(",").map(normHandle).filter(Boolean));
   return set.has(u);
@@ -5254,7 +5272,7 @@ async function verifyMiniappToken(token, env) {
     const j = JSON.parse(raw);
     const userId = String(j?.userId || "").trim();
     if (!userId) return { ok: false, reason: "token_user_missing" };
-    return { ok: true, userId, fromLike: { username: String(j?.username || "") }, via: "mini_token" };
+    return { ok: true, userId, fromLike: { id: String(userId), username: String(j?.username || "") }, via: "mini_token" };
   } catch {
     return { ok: false, reason: "token_bad_json" };
   }
@@ -5268,11 +5286,11 @@ async function verifyMiniappAuth(body, env) {
     const adminTok = String(env.WEB_ADMIN_TOKEN || "").trim();
     if (ownerTok && timingSafeEqual(webToken, ownerTok)) {
       const username = firstHandleFromCsv(env.OWNER_HANDLES) || "owner";
-      return { ok: true, userId: 999000001, fromLike: { username } };
+      return { ok: true, userId: 999000001, fromLike: { id: "999000001", username } };
     }
     if (adminTok && timingSafeEqual(webToken, adminTok)) {
       const username = firstHandleFromCsv(env.ADMIN_HANDLES) || firstHandleFromCsv(env.OWNER_HANDLES) || "admin";
-      return { ok: true, userId: 999000002, fromLike: { username } };
+      return { ok: true, userId: 999000002, fromLike: { id: "999000002", username } };
     }
   }
 
@@ -5297,7 +5315,7 @@ async function verifyTelegramInitData(initData, botToken, maxAgeSecRaw, lenientR
   const initRaw = String(initData || "").trim();
   if (lenient && initRaw.startsWith("dev:")) {
     const devId = Number(initRaw.split(":")[1] || "0") || 999001;
-    return { ok: true, userId: devId, fromLike: { username: "dev_user" } };
+    return { ok: true, userId: devId, fromLike: { id: String(devId), username: "dev_user" } };
   }
   if (!botToken && !lenient) return { ok: false, reason: "bot_token_missing" };
 
@@ -5326,7 +5344,7 @@ async function verifyTelegramInitData(initData, botToken, maxAgeSecRaw, lenientR
   const userId = user?.id || Number(params.get("user_id") || "0");
   if (!userId) return { ok: false, reason: "user_missing" };
 
-  const fromLike = { username: user?.username || "", first_name: user?.first_name || "", last_name: user?.last_name || "", language_code: user?.language_code || "" };
+  const fromLike = { id: String(userId), username: user?.username || "", first_name: user?.first_name || "", last_name: user?.last_name || "", language_code: user?.language_code || "" };
   return { ok: true, userId, fromLike };
 }
 
