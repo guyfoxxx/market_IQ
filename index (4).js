@@ -7,7 +7,7 @@ export default {
 
       // ===== MINI APP (inline) =====
       // Serve app.js from root and nested miniapp paths (e.g. /miniapp/app.js)
-      if (request.method === "GET" && (url.pathname === "/app.js" || url.pathname.endsWith("/app.js"))) {
+      if (request.method === "GET" && (url.pathname === "/app.js" || url.pathname.endsWith("/app.js") || url.pathname === "/app.v20260215a.js" || url.pathname.endsWith("/app.v20260215a.js"))) {
         return jsResponse(MINI_APP_JS);
       }
       // Serve Mini App shell on root and non-API clean paths (e.g. /miniapp)
@@ -5187,10 +5187,10 @@ function escapeHtml(s) {
 
 /* ========================== MINI APP INLINE ASSETS ========================== */
 function htmlResponse(html, status = 200) {
-  return new Response(html, { status, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store, max-age=0" } });
+  return new Response(html, { status, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store, no-cache, max-age=0, must-revalidate", "pragma":"no-cache", "expires":"0" } });
 }
 function jsResponse(js, status = 200) {
-  return new Response(js, { status, headers: { "content-type": "application/javascript; charset=utf-8", "cache-control": "no-store, max-age=0" } });
+  return new Response(js, { status, headers: { "content-type": "application/javascript; charset=utf-8", "cache-control": "no-store, no-cache, max-age=0, must-revalidate", "pragma":"no-cache", "expires":"0" } });
 }
 function jsonResponse(obj, status = 200) {
   return new Response(JSON.stringify(obj), { status, headers: { "content-type": "application/json; charset=utf-8" } });
@@ -6033,7 +6033,7 @@ const MINI_APP_HTML = `<!doctype html>
         <div class="badge" id="toastB">—</div>
       </div>
 
-      <script src="app.js"></script>
+      <script src="app.v20260215a.js"></script>
 </body>
 </html>`;
 
