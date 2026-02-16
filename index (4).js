@@ -42,7 +42,7 @@ export default {
         const styles = await getStyleList(env);
         const [offerBanner, offerBannerImage] = await Promise.all([getOfferBanner(env), getOfferBannerImage(env)]);
         const customPrompts = await getCustomPrompts(env);
-        const role = isOwner(v.fromLike, env) ? "owner" : (isAdmin(v.fromLike, env) ? "admin" : "user");
+        const role = v.roleHint || (isOwner(v.fromLike, env) ? "owner" : (isAdmin(v.fromLike, env) ? "admin" : "user"));
 
         return jsonResponse({
           ok: true,
@@ -120,7 +120,8 @@ export default {
 
         const v = await verifyMiniappAuth(body, env);
         if (!v.ok) return jsonResponse({ ok: false, error: v.reason }, 401);
-        if (!isStaff(v.fromLike, env)) return jsonResponse({ ok: false, error: "forbidden" }, 403);
+        const _staffOk = (v.roleHint === "owner" || v.roleHint === "admin") || isStaff(v.fromLike, env);
+        if (!_staffOk) return jsonResponse({ ok: false, error: "forbidden" }, 403);
 
         if (pathEndsWith(url.pathname, "/api/admin/bootstrap")) {
           const [prompt, styles, commission, offerBanner, offerBannerImage, payments, stylePrompts, customPrompts, freeDailyLimit, basePoints, withdrawals, tickets, adminFlags, welcomeBot, welcomeMiniapp] = await Promise.all([
@@ -150,7 +151,7 @@ export default {
         }
 
         if (pathEndsWith(url.pathname, "/api/admin/wallet")) {
-          if (!isOwner(v.fromLike, env)) return jsonResponse({ ok: false, error: "forbidden" }, 403);
+          if (!(v.roleHint === "owner") && !isOwner(v.fromLike, env)) return jsonResponse({ ok: false, error: "forbidden" }, 403);
           if (!env.BOT_KV) return jsonResponse({ ok: false, error: "bot_kv_missing" }, 500);
           const wallet = typeof body.wallet === "string" ? body.wallet.trim() : null;
           if (wallet !== null) {
@@ -6082,11 +6083,11 @@ async function verifyMiniappAuth(body, env) {
     const adminTok = String(env.WEB_ADMIN_TOKEN || "").trim();
     if (ownerTok && timingSafeEqual(webToken, ownerTok)) {
       const username = firstHandleFromCsv(env.OWNER_HANDLES) || "owner";
-      return { ok: true, userId: 999000001, fromLike: { username } };
+      return { ok: true, userId: 999000001, fromLike: { username }, roleHint: "owner", via: "web_owner_token" };
     }
     if (adminTok && timingSafeEqual(webToken, adminTok)) {
       const username = firstHandleFromCsv(env.ADMIN_HANDLES) || firstHandleFromCsv(env.OWNER_HANDLES) || "admin";
-      return { ok: true, userId: 999000002, fromLike: { username } };
+      return { ok: true, userId: 999000002, fromLike: { username }, roleHint: "admin", via: "web_admin_token" };
     }
   }
 
@@ -6903,6 +6904,7 @@ function lsRemove(key) { try { localStorage.removeItem(key); } catch (e) {} }
 const LOCAL_KEYS = {
   initData: "miniapp_init_data",
   miniToken: "miniapp_auth_token",
+  webToken: "miniapp_web_token_v1",
   userState: "miniapp_cached_user_state_v1",
   quoteCache: "miniapp_quote_cache_v1",
   newsCache: "miniapp_news_cache_v1",
@@ -6953,7 +6955,10 @@ function getFreshInitData() {
 
 function buildAuthBody(extra) {
   extra = extra || {};
-  const webToken = getParamEverywhere("access") || getParamEverywhere("webToken") || "";
+  const webTokenParam = getParamEverywhere("access") || getParamEverywhere("webToken") || "";
+  if (webTokenParam) { try { lsSet(LOCAL_KEYS.webToken, webTokenParam); } catch (e) {} }
+  const storedWebToken = lsGet(LOCAL_KEYS.webToken, "");
+  const webToken = webTokenParam || storedWebToken || "";
   const storedMiniToken = lsGet(LOCAL_KEYS.miniToken, "");
   const body = {
     initData: getFreshInitData(),
