@@ -118,7 +118,7 @@ export default {
         const body = await request.json().catch(() => null);
         if (!body) return jsonResponse({ ok: false, error: "bad_json" }, 400);
 
-        const v = await verifyTelegramInitData(body.initData, env.TELEGRAM_BOT_TOKEN, env.INITDATA_MAX_AGE_SEC, env.MINIAPP_AUTH_LENIENT);
+        const v = await verifyMiniappAuth(body, env);
         if (!v.ok) return jsonResponse({ ok: false, error: v.reason }, 401);
         if (!isStaff(v.fromLike, env)) return jsonResponse({ ok: false, error: "forbidden" }, 403);
 
