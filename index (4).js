@@ -302,7 +302,7 @@ ${reply}`;
         }
 
         if (pathEndsWith(url.pathname, "/api/admin/users")) {
-          if (!isOwner(v.fromLike, env)) return jsonResponse({ ok: false, error: "forbidden" }, 403);
+          if (!(v.roleHint === "owner") && !isOwner(v.fromLike, env)) return jsonResponse({ ok: false, error: "forbidden" }, 403);
           const users = await listUsers(env, Number(body.limit || 100));
           const now = Date.now();
           const report = users.map((u) => {
@@ -334,7 +334,7 @@ ${reply}`;
         }
 
         if (pathEndsWith(url.pathname, "/api/admin/report/pdf")) {
-          if (!isOwner(v.fromLike, env)) return jsonResponse({ ok: false, error: "forbidden" }, 403);
+          if (!(v.roleHint === "owner") && !isOwner(v.fromLike, env)) return jsonResponse({ ok: false, error: "forbidden" }, 403);
           const users = await listUsers(env, Math.min(300, Math.max(1, Number(body.limit || 200))));
           const payments = await listPayments(env, 120);
           const withdrawals = await listWithdrawals(env, 120);
@@ -8390,7 +8390,7 @@ __mi_tmp = el("downloadReportPdf"); if (__mi_tmp) __mi_tmp.addEventListener("cli
     showToast("در حال ساخت PDF…", "گزارش کامل", "PDF", true);
     const r = await fetch(apiUrl("/api/admin/report/pdf"), {      method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ initData: INIT_DATA, limit: 250 }),
+      body: JSON.stringify(buildAuthBody({ limit: 250 })),
     });
     if (!r.ok) throw new Error("http_" + r.status);
     const blob = await r.blob();
